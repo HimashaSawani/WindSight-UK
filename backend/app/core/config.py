@@ -14,6 +14,12 @@ class Settings(BaseSettings):
     cache_dir: str = ".cache/elexon"
     cache_ttl_seconds: int = Field(default=900, ge=0)
     cache_refresh: bool = False
+    ingestion_enabled: bool = False
+    ingestion_interval_seconds: int = Field(default=3600, ge=60, le=86400)
+    ingestion_lookback_days: int = Field(default=2, ge=1, le=90)
+    ingestion_forecast_overlap_hours: int = Field(default=6, ge=1, le=168)
+    ingestion_store_path: str = ".data/windsight/ingestion.json"
+    ingestion_admin_token: str | None = None
     decision_cutoff_local_time: time = time(hour=12)
     forecast_publication_lookback_days: int = Field(default=31, ge=1, le=90)
 

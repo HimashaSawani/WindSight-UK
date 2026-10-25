@@ -656,7 +656,9 @@ async def trigger_ingestion_sync(
             },
         )
     provided = request.headers.get("x-admin-token", "")
-    if not hmac.compare_digest(provided, settings.ingestion_admin_token):
+    if not hmac.compare_digest(
+        provided.encode("utf-8"), settings.ingestion_admin_token.encode("utf-8")
+    ):
         raise HTTPException(
             status_code=401,
             detail={"code": "invalid_admin_token", "message": "A valid admin token is required."},
