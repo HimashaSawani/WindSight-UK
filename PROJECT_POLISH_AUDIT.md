@@ -1,5 +1,12 @@
 # WindSight UK — Project Polish Audit
 
+> **Superseded status:** The audit findings below are a historical snapshot
+> from before the final release-readiness pass. Current verification resolves
+> the archive-size visibility and scheduled-ingestion coordination gaps, expands
+> browser/accessibility coverage, and updates the dependency audit. Read
+> [`FINAL_RELEASE_READINESS.md`](./FINAL_RELEASE_READINESS.md) for the
+> authoritative current status; use the older findings below only as context.
+
 ## Scope and evidence
 
 This audit began with inspection of the current frontend, backend, tests,

@@ -76,7 +76,7 @@ jobs:
       - name: Build frontend image
         uses: docker/build-push-action@v6
         with:
-          context: ./frontend
+          context: .
           file: ./frontend/Dockerfile
           push: false
           tags: windsight-frontend:ci

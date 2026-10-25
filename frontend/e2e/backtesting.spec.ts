@@ -215,6 +215,7 @@ test('backtesting route exposes API errors and rejects duplicate cutoffs', async
 })
 
 test('all routes render across viewports with accessible navigation and charts', async ({ page }) => {
+  test.setTimeout(120_000)
   await page.route('**/api/**', fulfillApi)
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto('/overview')
@@ -229,15 +230,57 @@ test('all routes render across viewports with accessible navigation and charts',
   ]
 
   for (const { label, heading, path } of routes) {
-    await page.getByRole('link', { name: label }).click()
-    await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible()
     for (const width of [1440, 768, 390]) {
       await page.setViewportSize({ width, height: 900 })
-      const overflow = await page.evaluate(
-        () => document.documentElement.scrollWidth - document.documentElement.clientWidth > 1,
-      )
-      expect(overflow, `${path} overflows at ${width}px`).toBe(false)
+      await page.goto(path)
+      await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible()
+      const layout = await page.evaluate(() => ({
+        viewport: document.documentElement.clientWidth,
+        document: document.documentElement.scrollWidth,
+        chartAncestors: (() => {
+          const sizes = []
+          let element: HTMLElement | null = document.querySelector('.recharts-wrapper')
+          while (element && sizes.length < 8) {
+            const rect = element.getBoundingClientRect()
+            sizes.push({
+              tag: element.tagName,
+              className: element.className,
+              left: Math.round(rect.left),
+              width: Math.round(rect.width),
+              clientWidth: element.clientWidth,
+              scrollWidth: element.scrollWidth,
+            })
+            element = element.parentElement
+          }
+          return sizes
+        })(),
+        overflowing: [...document.querySelectorAll('body *')]
+          .map((element) => ({
+            tag: element.tagName,
+            className: typeof element.className === 'string' ? element.className : '',
+            right: Math.round(element.getBoundingClientRect().right),
+            text: (element.textContent ?? '').trim().slice(0, 60),
+          }))
+          .filter((element) => element.right > document.documentElement.clientWidth + 1)
+          .sort((left, right) => right.right - left.right)
+          .slice(0, 5),
+      }))
+      expect(
+        layout.document - layout.viewport,
+        `${path} overflows at ${width}px: ${JSON.stringify(layout)}`,
+      ).toBeLessThanOrEqual(1)
+      if (width === 1440) {
+        const accessibility = await new AxeBuilder({ page })
+          .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+          .analyze()
+        expect(accessibility.violations.map((violation) => ({
+          id: violation.id,
+          impact: violation.impact,
+          nodes: violation.nodes.map((node) => node.target),
+        })), `${path} accessibility violations`).toEqual([])
+      }
     }
+    expect(await page.getByRole('link', { name: label }).count()).toBe(1)
   }
 
   await page.getByLabel('Decision date period').selectOption('2026-01-01|2026-01-01')
@@ -247,16 +290,29 @@ test('all routes render across viewports with accessible navigation and charts',
   expect(await page.getByRole('link', { name: 'Forecast explorer' }).evaluate((element) =>
     getComputedStyle(element).outlineStyle,
   )).toBe('solid')
+  await page.getByRole('link', { name: 'Backtesting lab' }).click()
+  await expect(page.getByLabel('First cutoff')).toBeVisible()
+  await expect(page.getByLabel('Second cutoff')).toBeVisible()
   await page.getByRole('link', { name: 'Forecast explorer' }).click()
-  await expect(page.getByRole('img', { name: /Line chart comparing forecast and actual/ })).toBeVisible()
+  const chart = page.getByRole('img', { name: /Line chart comparing forecast and actual/ })
+  await expect(chart).toBeVisible()
+  await chart.hover({ position: { x: 180, y: 130 } })
+  await expect(page.getByText(/(?:100|95|90) MW/).first()).toBeVisible()
   await page.getByRole('link', { name: 'Data & methodology' }).click()
   await expect(page.getByText('Ingestion runs retained')).toBeVisible()
+})
 
-  const accessibility = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze()
-  expect(accessibility.violations.map((violation) => ({
-    id: violation.id,
-    impact: violation.impact,
-    description: violation.description,
-    nodes: violation.nodes.map((node) => node.target),
-  }))).toEqual([])
+test('loading, empty data, and API errors are explicit', async ({ page }) => {
+  await page.route('**/api/**', fulfillApi)
+  await page.route(/\/api\/comparison(?:\?.*)?$/, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    await route.fulfill({
+      status: 200,
+      json: { ...comparison, observation_count: 0, observations: [] },
+    })
+  })
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/forecasts')
+  await expect(page.getByRole('status', { name: 'Loading Elexon data' })).toBeVisible()
+  await expect(page.getByText('No validated observations')).toBeVisible()
 })

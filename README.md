@@ -109,6 +109,16 @@ FUELHH targets are half-hourly. Comparisons therefore use exact UTC target-time
 matches only and must be treated as **indicative** until Elexon confirms source
 equivalence.
 
+The WINDFOR stream documentation lists publication-time filters but no page,
+offset, or maximum-record parameter; it does not state a response-size or
+completeness guarantee. A bounded live publication-day response returned 584
+records (8 publication times and 73 hourly targets) without `Link` or
+`Content-Range` headers. This does not prove completeness for larger windows.
+The FUELHH documentation example has a `dataset` value of `FUELINST` despite
+being on the FUELHH endpoint page; the observed live FUELHH response used
+`FUELHH`. The example discrepancy does not establish equivalence between the
+forecast and actual datasets.
+
 ## Historical forecast selection
 
 For each January decision date:
@@ -198,14 +208,20 @@ details, the last 100 run summaries, and the incremental checkpoint. Docker
 Compose mounts a named volume at `/data` so the store survives container
 recreation. The existing Elexon disk response cache remains in place and
 reduces repeated requests. The API reports its current archive byte size and
-source-record counts. A process-level file lock prevents two ingestion-enabled
+source-record counts. No archive file existed at the configured default path
+during the final readiness review. A synthetic 15,000-record benchmark
+measured a 2.18 MB file; it is not a production archive measurement. A
+process-level file lock prevents two ingestion-enabled
 workers using the same lock-capable mounted store from running the scheduler
 at once. The deployment must still use a single ingestion-enabled replica (or
 a shared filesystem with reliable lock semantics); replicas with isolated
 stores are not coordinated. This is a small single-instance portfolio store,
 not a substitute for an indexed multi-worker database. It has no automatic
 retention and preserves all historical revisions, so monitor its reported size
-before expanding its history.
+before expanding its history. At the observed sample cadence and benchmark
+record size, storage growth would be roughly 34 MB/year if about 584 forecast
+and 48 actual records are added daily; actual growth varies with revisions,
+rejections, and record shape.
 
 Validation applies the existing strict required-field, timezone-aware timestamp,
 finite numeric generation, and WIND-fuel checks. Rejected raw records and their
@@ -282,7 +298,10 @@ also returns maximum absolute error, expected/matched counts, missing forecasts
 and actuals, and separate forecast and actual coverage. Empty metric sets are
 returned as null metrics, not invented values. No MAPE, arbitrary normalized
 accuracy score, missing-value substitution, interpolation, or MWh conversion
-is performed. Power readings are expressed in MW.
+is performed. FUELHH documents average MW; the application labels WINDFOR
+generation values in MW-based fields, but the WINDFOR endpoint documentation
+does not confirm their unit or aggregation semantics. Resulting comparisons
+remain indicative.
 
 ## Local setup
 
@@ -341,6 +360,15 @@ npm run e2e
 
 The Playwright test starts Vite itself and mocks API failures; it does not
 require a running Elexon-backed API.
+
+The latest local regression run passed 39 backend tests, 3 frontend unit tests,
+all 3 Playwright tests, frontend lint/typecheck/build, Ruff, and both npm and
+Python dependency audits. Playwright checked all six routes at 1440, 768, and
+390 px, plus Axe WCAG 2.1 A/AA, keyboard focus, date selection, chart tooltip,
+and loading/empty/error states. These results do not substitute for a
+GitHub-hosted CI run, Docker startup, or assistive-technology testing; see the
+[final release-readiness report](./FINAL_RELEASE_READINESS.md) for exact
+evidence and limitations.
 
 ## Environment variables
 
@@ -470,9 +498,10 @@ included in this project.
 
 - WINDFOR and FUELHH measurement/aggregation equivalence is not established by
   the inspected endpoint documentation; resulting metrics are indicative.
-- The ingestion JSON store is a single-process portfolio implementation with
-  no retention or indexing policy; it is not sized for unbounded history or
-  multiple backend workers.
+- The ingestion JSON store is a small file-backed portfolio implementation
+  with no retention or indexing policy. Its lease coordinates scheduled
+  ingestion only when workers share a lock-capable store; it is not a
+  distributed database or storage for unbounded history.
 - Hourly forecast targets versus half-hourly actual targets mean exact matching
   can yield missing forecast coverage. No interpolation or forward-fill is
   applied.
@@ -484,9 +513,13 @@ included in this project.
 - Analysis results are cached in process for 30 seconds; source responses are
   disk-cached according to the configured TTL. The diagnostics endpoint is
   process-local.
-- No persistent database, authentication, trading capability, forecast model,
-  price or demand forecast, MWh conversion, or commercial savings calculation.
-- Docker and public deployment remain unverified in this environment.
+- No persistent database, general user accounts/authentication (the manual
+  sync action uses an admin token), trading capability, forecast model, price
+  or demand forecast, MWh conversion, or commercial savings calculation.
+- Docker execution, GitHub-hosted CI, and public deployment remain unverified
+  in this environment. The CI workflow and Docker configuration were checked
+  statically; browser accessibility automation passed, but screen-reader
+  testing and in-place viewport-resize behavior remain unverified.
 
 ## Future improvements
 
@@ -495,10 +528,10 @@ included in this project.
 - Confirm WINDFOR response completeness and pagination/record limits from
   authoritative API documentation before claiming coverage is fully explained.
 - Confirm the procurement decision cutoff with the business owner.
-- Run the configured GitHub Actions workflow and verify Docker images and
-  Compose startup in an environment with Docker Engine.
+- Verify the configured GitHub Actions workflow and Docker images in an
+  environment with access to hosted CI and Docker Engine.
 - Deploy to approved frontend/backend hosts and verify public URLs and CORS.
-- Expand browser coverage and verify accessibility and tablet layouts.
+- Verify assistive-technology behavior and viewport changes without reload.
 - Add optional persistence/retention only if operational requirements justify
   introducing a database.
 
