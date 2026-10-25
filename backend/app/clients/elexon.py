@@ -82,6 +82,7 @@ class ElexonClient:
         self._semaphore = asyncio.Semaphore(4)
         self.requests_made = 0
         self.cache_hits = 0
+        self.failed_requests = 0
 
     async def close(self) -> None:
         if self._owns_client:
@@ -105,17 +106,20 @@ class ElexonClient:
                 response = await self.http.get(url, params=params)
             except httpx.TimeoutException as error:
                 if attempt == self.max_retries:
+                    self.failed_requests += 1
                     raise ElexonAPIError(f"Elexon request timed out: {url}") from error
                 await asyncio.sleep(self._backoff(attempt))
                 continue
             except httpx.RequestError as error:
                 if attempt == self.max_retries:
+                    self.failed_requests += 1
                     raise ElexonAPIError(f"Elexon request failed: {error}") from error
                 await asyncio.sleep(self._backoff(attempt))
                 continue
 
             if response.status_code == 429 or response.status_code >= 500:
                 if attempt == self.max_retries:
+                    self.failed_requests += 1
                     raise ElexonAPIError(
                         f"Elexon returned HTTP {response.status_code} after retries."
                     )
@@ -124,18 +128,21 @@ class ElexonClient:
                 await asyncio.sleep(delay if delay is not None else self._backoff(attempt))
                 continue
             if response.is_error:
+                self.failed_requests += 1
                 raise ElexonAPIError(
                     f"Elexon returned HTTP {response.status_code}: {response.text[:500]}"
                 )
             try:
                 decoded = response.json()
             except json.JSONDecodeError as error:
+                self.failed_requests += 1
                 raise ElexonAPIError("Elexon response was not valid JSON.") from error
             if isinstance(decoded, dict) and isinstance(decoded.get("data"), list):
                 decoded = decoded["data"]
             if not isinstance(decoded, list) or not all(
                 isinstance(record, dict) for record in decoded
             ):
+                self.failed_requests += 1
                 raise ElexonAPIError("Elexon response did not contain a record array.")
             await self.cache.put(key, decoded)
             return decoded

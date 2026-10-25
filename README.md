@@ -23,6 +23,13 @@ decision cutoff so later revisions cannot leak into earlier decisions.
   historical analysis, and methodology/data-quality pages.
 - Forecast Revision Timeline for inspecting every retrieved WINDFOR revision
   for a selected delivery interval, including post-decision revisions.
+- Historical Backtesting Lab for comparing configurable Europe/London decision
+  cutoffs on a common set of matched delivery intervals.
+- Persistence-baseline benchmarking using only forecasts published by the
+  historical cutoff, plus empirical residual what-if scenarios.
+- Pipeline diagnostics for retrieval attempts, successful refreshes, malformed
+  and missing records, source timestamps, failed requests, and cache use.
+- Rolling API availability and response-time metrics (mean and p95).
 - Live Elexon BMRS ingestion: FUELHH actuals filtered to `fuelType=WIND` and
   WINDFOR forecast revisions, with source metadata and timestamps retained.
 - Point-in-time selection, explicit missing-data states, and duplicate conflict
@@ -112,6 +119,38 @@ The WINDFOR publication retrieval lookback defaults to 31 days before the
 earliest requested decision date and is configurable. This is an application
 request-window setting, not a documented Elexon retention guarantee; forecasts
 published earlier than that lookback are not included.
+
+## Backtesting, benchmarking, and what-if analysis
+
+`GET /api/backtest` accepts the January decision date range and two distinct
+`HH:MM` cutoff values in `Europe/London`. Forecasts are retrieved through the
+later cutoff, then reconstructed separately at each historical cutoff; no
+publication after a selected cutoff is eligible. The response includes
+individual cutoff metrics and a separate comparison scored on the exact common
+matched timestamps where both forecasts and the actual are present.
+
+The persistence benchmark for each delivery interval is the forecast for the
+immediately preceding 30-minute target interval that had been published by that
+same decision cutoff. The first interval of a delivery day has no in-day
+predecessor. Missing predecessor forecasts remain missing; baseline metrics
+report their own matched count and are not forward-filled.
+
+The Backtesting Lab also exposes empirical p10/p50/p90 forecast-error
+quantiles. Its What-if panel applies those historical residual quantiles to a
+user-entered reference generation level and labels all outcomes hypothetical.
+These are not calibrated prediction intervals, actual forecasts, purchase
+recommendations, or trading advice.
+
+## Operational monitoring
+
+`GET /api/data-quality` reports the most recent pipeline operation, attempt
+and successful-refresh timestamps, source record counts, missing and malformed
+records, latest retrieved source timestamps, and Elexon request/cache counters.
+`GET /api/performance` reports rolling five-minute request count, server-error
+availability, mean and p95 API response time, plus process uptime and lifetime
+counts. These operational metrics are in-memory and process-local; they reset
+on restart and are intended for this single-process portfolio deployment, not
+as durable distributed monitoring.
 
 ## Forecast Revision Timeline
 

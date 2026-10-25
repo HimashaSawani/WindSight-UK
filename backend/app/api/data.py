@@ -11,7 +11,9 @@ from pydantic import BaseModel
 from app.clients.elexon import ElexonAPIError
 from app.core.config import get_settings
 from app.schemas.analysis import (
+    APIPerformanceResponse,
     AccuracyResponse,
+    BacktestResponse,
     DailyAccuracy,
     ForecastRevision,
     ForecastRevisionResponse,
@@ -21,6 +23,7 @@ from app.schemas.analysis import (
 )
 from app.schemas.records import ActualRecord, ComparisonObservation, ForecastRecord
 from app.services.ingestion import load_january_comparison_inputs
+from app.services.backtesting import run_backtest
 from app.services.metrics import calculate_metrics
 from app.services.normalization import normalize_actual, normalize_forecast
 from app.services.point_in_time import (
@@ -52,6 +55,7 @@ class ForecastDatasetResponse(BaseModel):
 class DataDiagnosticsResponse(BaseModel):
     status: str
     last_operation: str | None
+    last_attempt: datetime | None
     last_successful_refresh: datetime | None
     raw_forecast_records: int
     normalized_forecast_records: int
@@ -61,6 +65,11 @@ class DataDiagnosticsResponse(BaseModel):
     invalid_actual_records: int
     requests_made: int
     cache_hits: int
+    failed_requests: int
+    missing_forecast_records: int
+    missing_actual_records: int
+    forecast_source_latest_time: datetime | None
+    actual_source_latest_time: datetime | None
     message: str
 
 
@@ -69,6 +78,7 @@ def _diagnostics(request: Request) -> dict[str, Any]:
         request.app.state.data_diagnostics = {
             "status": "not_requested",
             "last_operation": None,
+            "last_attempt": None,
             "last_successful_refresh": None,
             "raw_forecast_records": 0,
             "normalized_forecast_records": 0,
@@ -76,6 +86,10 @@ def _diagnostics(request: Request) -> dict[str, Any]:
             "raw_actual_records": 0,
             "normalized_actual_records": 0,
             "invalid_actual_records": 0,
+            "missing_forecast_records": 0,
+            "missing_actual_records": 0,
+            "forecast_source_latest_time": None,
+            "actual_source_latest_time": None,
             "message": "No Elexon data has been requested in this process.",
         }
     return request.app.state.data_diagnostics
@@ -148,6 +162,12 @@ async def _fetch_and_select(
     decision_end: date,
     settings: Any,
 ) -> list[ComparisonObservation]:
+    diagnostics = _diagnostics(request)
+    diagnostics.update(
+        status="loading",
+        last_operation="comparison",
+        last_attempt=datetime.now(timezone.utc),
+    )
     result = await load_january_comparison_inputs(
         request.app.state.elexon_client,
         decision_start,
@@ -155,7 +175,16 @@ async def _fetch_and_select(
         settings.decision_cutoff_local_time,
         settings.forecast_publication_lookback_days,
     )
-    diagnostics = _diagnostics(request)
+    days = [
+        date.fromordinal(day)
+        for day in range(decision_start.toordinal(), decision_end.toordinal() + 1)
+    ]
+    observations = select_point_in_time(
+        days,
+        result.forecasts,
+        result.actuals,
+        settings.decision_cutoff_local_time,
+    )
     diagnostics.update(
         status="ok",
         last_operation="comparison",
@@ -166,18 +195,17 @@ async def _fetch_and_select(
         raw_actual_records=result.raw_actual_count,
         normalized_actual_records=len(result.actuals),
         invalid_actual_records=result.invalid_actuals,
+        missing_forecast_records=sum(row.forecast_mw is None for row in observations),
+        missing_actual_records=sum(row.actual_mw is None for row in observations),
+        forecast_source_latest_time=max(
+            (to_utc(row.publish_time) for row in result.forecasts), default=None
+        ),
+        actual_source_latest_time=max(
+            (to_utc(row.start_time) for row in result.actuals), default=None
+        ),
         message="Elexon data retrieved and normalized successfully.",
     )
-    days = [
-        date.fromordinal(day)
-        for day in range(decision_start.toordinal(), decision_end.toordinal() + 1)
-    ]
-    return select_point_in_time(
-        days,
-        result.forecasts,
-        result.actuals,
-        settings.decision_cutoff_local_time,
-    )
+    return observations
 
 
 def _daily(observations: list[ComparisonObservation]) -> list[DailyAccuracy]:
@@ -235,6 +263,11 @@ async def get_actuals(
     end_date: date = Query(description="Inclusive FUELHH delivery date."),
 ) -> ActualDatasetResponse:
     diagnostics = _diagnostics(request)
+    diagnostics.update(
+        status="loading",
+        last_operation="actuals",
+        last_attempt=datetime.now(timezone.utc),
+    )
     try:
         raw = await request.app.state.elexon_client.fetch_actuals(start_date, end_date)
         records, invalid_count = _normalise(raw, normalize_actual)
@@ -244,9 +277,14 @@ async def get_actuals(
     except ValueError as error:
         raise HTTPException(status_code=422, detail={"code": "invalid_date_range", "message": str(error)}) from error
     diagnostics.update(
-        status="ok", last_operation="actuals", last_successful_refresh=datetime.now(timezone.utc),
+        status="ok", last_operation="actuals", last_attempt=datetime.now(timezone.utc),
+        last_successful_refresh=datetime.now(timezone.utc),
         raw_actual_records=len(raw), normalized_actual_records=len(records),
-        invalid_actual_records=invalid_count, message="FUELHH retrieval completed.",
+        invalid_actual_records=invalid_count,
+        actual_source_latest_time=max(
+            (to_utc(row.start_time) for row in records), default=None
+        ),
+        message="FUELHH retrieval completed.",
     )
     return ActualDatasetResponse(dataset="FUELHH", record_count=len(records), records=records)
 
@@ -258,6 +296,11 @@ async def get_forecasts(
     publish_to: datetime = Query(description="Inclusive timezone-aware forecast publication timestamp."),
 ) -> ForecastDatasetResponse:
     diagnostics = _diagnostics(request)
+    diagnostics.update(
+        status="loading",
+        last_operation="forecasts",
+        last_attempt=datetime.now(timezone.utc),
+    )
     try:
         raw = await request.app.state.elexon_client.fetch_forecasts(publish_from, publish_to)
         records, invalid_count = _normalise(raw, normalize_forecast)
@@ -267,9 +310,14 @@ async def get_forecasts(
     except ValueError as error:
         raise HTTPException(status_code=422, detail={"code": "invalid_time_range", "message": str(error)}) from error
     diagnostics.update(
-        status="ok", last_operation="forecasts", last_successful_refresh=datetime.now(timezone.utc),
+        status="ok", last_operation="forecasts", last_attempt=datetime.now(timezone.utc),
+        last_successful_refresh=datetime.now(timezone.utc),
         raw_forecast_records=len(raw), normalized_forecast_records=len(records),
-        invalid_forecast_records=invalid_count, message="WINDFOR retrieval completed.",
+        invalid_forecast_records=invalid_count,
+        forecast_source_latest_time=max(
+            (to_utc(row.publish_time) for row in records), default=None
+        ),
+        message="WINDFOR retrieval completed.",
     )
     return ForecastDatasetResponse(dataset="WINDFOR", record_count=len(records), records=records)
 
@@ -309,13 +357,18 @@ async def get_forecast_revisions(
         )
 
     settings = get_settings()
+    diagnostics = _diagnostics(request)
+    diagnostics.update(
+        status="loading",
+        last_operation="forecast_revisions",
+        last_attempt=datetime.now(timezone.utc),
+    )
     publish_from = datetime.combine(
         decision_date - timedelta(days=settings.forecast_publication_lookback_days),
         time.min,
         tzinfo=ZoneInfo("Europe/London"),
     ).astimezone(timezone.utc)
     publish_to = datetime.now(timezone.utc)
-    diagnostics = _diagnostics(request)
     try:
         raw = await request.app.state.elexon_client.fetch_forecasts(
             publish_from, publish_to
@@ -359,16 +412,23 @@ async def get_forecast_revisions(
             )
             > 1,
         )
-        for record in sorted(matching, key=lambda item: to_utc(item.publish_time))
+        for record in sorted(
+            matching,
+            key=lambda item: (to_utc(item.publish_time), item.generation_mw),
+        )
     ]
 
     diagnostics.update(
         status="ok",
         last_operation="forecast_revisions",
+        last_attempt=datetime.now(timezone.utc),
         last_successful_refresh=datetime.now(timezone.utc),
         raw_forecast_records=len(raw),
         normalized_forecast_records=len(forecasts),
         invalid_forecast_records=invalid_count,
+        forecast_source_latest_time=max(
+            (to_utc(row.publish_time) for row in forecasts), default=None
+        ),
         message="WINDFOR forecast revisions retrieved successfully.",
     )
     return ForecastRevisionResponse(
@@ -380,6 +440,90 @@ async def get_forecast_revisions(
         timezone="Europe/London",
         revisions=revisions,
     )
+
+
+@router.get("/backtest", response_model=BacktestResponse)
+async def get_backtest(
+    request: Request,
+    decision_start: date = Query(default=JANUARY_START),
+    decision_end: date = Query(default=JANUARY_END),
+    first_cutoff: time = Query(default=time(9), description="First Europe/London decision cutoff."),
+    second_cutoff: time = Query(default=time(12), description="Second Europe/London decision cutoff."),
+) -> BacktestResponse:
+    start, end = _selected(decision_start, decision_end, None)
+    if first_cutoff == second_cutoff:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "identical_cutoffs",
+                "message": "Choose two different decision cutoffs to compare.",
+            },
+        )
+
+    settings = get_settings()
+    latest_cutoff = max(first_cutoff, second_cutoff)
+    diagnostics = _diagnostics(request)
+    diagnostics.update(
+        status="loading",
+        last_operation="backtest",
+        last_attempt=datetime.now(timezone.utc),
+    )
+    try:
+        result = await load_january_comparison_inputs(
+            request.app.state.elexon_client,
+            start,
+            end,
+            settings.decision_cutoff_local_time,
+            settings.forecast_publication_lookback_days,
+            latest_cutoff_local_time=latest_cutoff,
+        )
+    except ElexonAPIError as error:
+        diagnostics.update(status="error", message=str(error))
+        raise HTTPException(
+            status_code=502,
+            detail={"code": "elexon_error", "message": str(error)},
+        ) from error
+    except ValueError as error:
+        diagnostics.update(status="error", message=str(error))
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "invalid_backtest_range", "message": str(error)},
+        ) from error
+
+    decision_dates = [
+        date.fromordinal(day)
+        for day in range(start.toordinal(), end.toordinal() + 1)
+    ]
+    response = run_backtest(
+        decision_dates,
+        result.forecasts,
+        result.actuals,
+        first_cutoff,
+        second_cutoff,
+    )
+    selected_rows = response.first_cutoff_matched_observations
+    diagnostics.update(
+        status="ok",
+        last_operation="backtest",
+        last_attempt=datetime.now(timezone.utc),
+        last_successful_refresh=datetime.now(timezone.utc),
+        raw_forecast_records=result.raw_forecast_count,
+        normalized_forecast_records=len(result.forecasts),
+        invalid_forecast_records=result.invalid_forecasts,
+        raw_actual_records=result.raw_actual_count,
+        normalized_actual_records=len(result.actuals),
+        invalid_actual_records=result.invalid_actuals,
+        missing_forecast_records=response.first.forecast_metrics.missing_forecasts,
+        missing_actual_records=response.first.forecast_metrics.missing_actuals,
+        forecast_source_latest_time=max(
+            (to_utc(row.publish_time) for row in result.forecasts), default=None
+        ),
+        actual_source_latest_time=max(
+            (to_utc(row.start_time) for row in result.actuals), default=None
+        ),
+        message=f"Backtest completed with {selected_rows} matched first-cutoff intervals.",
+    )
+    return response
 
 
 @router.get("/comparison", response_model=ComparisonResponse)
@@ -465,4 +609,34 @@ async def get_data_quality(request: Request) -> DataDiagnosticsResponse:
         **diagnostics,
         requests_made=client.requests_made,
         cache_hits=client.cache_hits,
+        failed_requests=client.failed_requests,
+    )
+
+
+@router.get("/performance", response_model=APIPerformanceResponse)
+async def get_api_performance(request: Request) -> APIPerformanceResponse:
+    metrics = request.app.state.api_metrics
+    now = monotonic_time.monotonic()
+    cutoff = now - 300
+    samples = [sample for sample in metrics["samples"] if sample[0] >= cutoff]
+    durations = sorted(sample[1] for sample in samples)
+    server_errors = sum(sample[2] for sample in samples)
+    total_requests = metrics["total_requests"]
+    total_errors = metrics["total_server_errors"]
+    return APIPerformanceResponse(
+        uptime_seconds=now - metrics["started_at"],
+        requests_in_window=len(samples),
+        server_errors_in_window=server_errors,
+        availability_pct=(
+            (len(samples) - server_errors) / len(samples) * 100 if samples else None
+        ),
+        mean_response_time_ms=(
+            sum(durations) / len(durations) if durations else None
+        ),
+        p95_response_time_ms=(
+            durations[min(len(durations) - 1, int(len(durations) * 0.95))]
+            if durations else None
+        ),
+        total_requests=total_requests,
+        total_server_errors=total_errors,
     )
