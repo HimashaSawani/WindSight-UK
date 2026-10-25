@@ -164,7 +164,9 @@ export function MethodologyPage() {
         <p className="text-sm leading-6 text-slate-600">Missing forecasts and missing actuals remain null and count against their respective coverage. They are never replaced with zero. FUELHH is documented as average MW over 30-minute intervals. WINDFOR documents generation forecasts but available endpoint documentation does not confirm equivalent measurement semantics; observed WINDFOR target times are hourly. Comparisons use exact timestamps only: no half-hour interpolation, forward-fill, or MWh conversion is applied. Treat results as indicative until Elexon confirms compatible definitions.</p>
       </Panel>
       <Panel className="mt-5" title="Retrieval diagnostics">
-        {quality.isPending ? <LoadingState label="Loading data-quality status" /> : quality.isError ? <p className="text-sm text-rose-700">Diagnostics are unavailable.</p> : <div className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+        {quality.isPending ? <LoadingState label="Loading data-quality status" /> : quality.isError ? <p className="text-sm text-rose-700">Diagnostics are unavailable.</p> : <>
+        <p className="mb-4 text-sm leading-6 text-slate-600">Analysis data source: <strong>{quality.data.analytics_data_source === 'live_elexon' ? 'live Elexon API' : quality.data.analytics_data_source}</strong>. The persisted records below are an independent ingestion archive and are not currently used by analysis endpoints.</p>
+        <div className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <div><p className="text-slate-500">Pipeline status / operation</p><p className="mt-1 font-semibold">{quality.data.status} / {quality.data.last_operation ?? 'none'}</p></div>
           <div><p className="text-slate-500">Last attempted sync</p><p className="mt-1 font-semibold">{quality.data.last_attempt ? formatLondonDateTime(quality.data.last_attempt) : 'Not recorded'}</p></div>
           <div><p className="text-slate-500">Last successful sync</p><p className="mt-1 font-semibold">{quality.data.last_successful_refresh ? formatLondonDateTime(quality.data.last_successful_refresh) : 'Not recorded'}</p></div>
@@ -182,7 +184,8 @@ export function MethodologyPage() {
           <div><p className="text-slate-500">Off-grid forecast timestamps</p><p className="mt-1 font-semibold">{quality.data.off_grid_forecast_records}</p></div>
           <div><p className="text-slate-500">Ingestion runs retained</p><p className="mt-1 font-semibold">{quality.data.recent_ingestion_runs.length} (last 10 shown)</p></div>
           <div className="sm:col-span-2"><p className="text-slate-500">Pipeline detail</p><p className="mt-1 font-medium">{quality.data.message}</p></div>
-        </div>}
+        </div>
+        </>}
         {!quality.isPending && !quality.isError && latestIngestionRun && (
             <div className="mt-4 rounded-lg border border-slate-200 p-4">
               <h3 className="text-sm font-semibold">Latest automated/manual sync run · {latestIngestionRun.status}</h3>

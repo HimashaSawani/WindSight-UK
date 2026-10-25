@@ -157,6 +157,7 @@ export interface IngestionRun {
 }
 
 export interface DataQualityResponse {
+  analytics_data_source: 'live_elexon'
   status: string
   last_operation: string | null
   last_attempt: string | null
