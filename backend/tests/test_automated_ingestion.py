@@ -4,7 +4,7 @@ import pytest
 
 from app.clients.elexon import ElexonAPIError
 from app.services.automated_ingestion import run_incremental_ingestion
-from app.services.ingestion_store import IngestionStore
+from app.services.ingestion_store import IngestionStore, acquire_ingestion_lease
 
 
 class FakeClient:
@@ -151,3 +151,27 @@ async def test_corrupt_store_is_not_overwritten(tmp_path) -> None:
         await store.merge_records([], [], [])
 
     assert store_path.read_text(encoding="utf-8") == "{not-json"
+
+
+@pytest.mark.asyncio
+async def test_ingestion_store_size_monitor_and_process_lease(tmp_path) -> None:
+    path = tmp_path / "ingestion.json"
+    store = IngestionStore(str(path))
+    assert await store.size_bytes() == 0
+
+    await store.merge_records(
+        forecasts=[{"startTime": "2026-01-01T00:00:00Z", "generation": 10}],
+        actuals=[],
+        rejected=[],
+    )
+    assert await store.size_bytes() == path.stat().st_size
+
+    lease = acquire_ingestion_lease(str(path))
+    try:
+        with pytest.raises(RuntimeError, match="already active"):
+            acquire_ingestion_lease(str(path))
+    finally:
+        lease.release()
+
+    second_lease = acquire_ingestion_lease(str(path))
+    second_lease.release()

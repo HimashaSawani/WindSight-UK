@@ -75,6 +75,7 @@ class DataDiagnosticsResponse(BaseModel):
     forecast_source_latest_time: datetime | None
     actual_source_latest_time: datetime | None
     ingestion_enabled: bool
+    stored_size_bytes: int
     stored_forecast_records: int
     stored_actual_records: int
     stored_rejected_records: int
@@ -628,6 +629,7 @@ async def get_data_quality(request: Request) -> DataDiagnosticsResponse:
         **diagnostics,
         analytics_data_source="live_elexon",
         ingestion_enabled=settings.ingestion_enabled,
+        stored_size_bytes=await request.app.state.ingestion_store.size_bytes(),
         stored_forecast_records=len(state["forecasts"]),
         stored_actual_records=len(state["actuals"]),
         stored_rejected_records=len(state["rejected"]),

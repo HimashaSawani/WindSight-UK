@@ -12,7 +12,7 @@ from app.api.router import api_router
 from app.core.config import get_settings
 from app.clients.elexon import DiskCache, ElexonClient
 from app.services.automated_ingestion import run_incremental_ingestion
-from app.services.ingestion_store import IngestionStore
+from app.services.ingestion_store import IngestionStore, acquire_ingestion_lease
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -66,6 +66,10 @@ async def _ingestion_loop(application: FastAPI) -> None:
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
+    ingestion_lease = None
+    if settings.ingestion_enabled:
+        ingestion_lease = acquire_ingestion_lease(settings.ingestion_store_path)
+
     application.state.api_metrics = {
         "started_at": time.monotonic(),
         "samples": deque(maxlen=10000),
@@ -113,14 +117,18 @@ async def lifespan(application: FastAPI):
         if settings.ingestion_enabled
         else None
     )
-    yield
-    if application.state.ingestion_task is not None:
-        application.state.ingestion_task.cancel()
-        try:
-            await application.state.ingestion_task
-        except asyncio.CancelledError:
-            pass
-    await application.state.elexon_client.close()
+    try:
+        yield
+    finally:
+        if application.state.ingestion_task is not None:
+            application.state.ingestion_task.cancel()
+            try:
+                await application.state.ingestion_task
+            except asyncio.CancelledError:
+                pass
+        await application.state.elexon_client.close()
+        if ingestion_lease is not None:
+            ingestion_lease.release()
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)

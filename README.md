@@ -197,9 +197,15 @@ The store is a versioned JSON document written atomically to
 details, the last 100 run summaries, and the incremental checkpoint. Docker
 Compose mounts a named volume at `/data` so the store survives container
 recreation. The existing Elexon disk response cache remains in place and
-reduces repeated requests. This simple store is suitable for the current
-single-process portfolio workload; it is not a substitute for a multi-worker
-database, and concurrent backend replicas must not share it.
+reduces repeated requests. The API reports its current archive byte size and
+source-record counts. A process-level file lock prevents two ingestion-enabled
+workers using the same lock-capable mounted store from running the scheduler
+at once. The deployment must still use a single ingestion-enabled replica (or
+a shared filesystem with reliable lock semantics); replicas with isolated
+stores are not coordinated. This is a small single-instance portfolio store,
+not a substitute for an indexed multi-worker database. It has no automatic
+retention and preserves all historical revisions, so monitor its reported size
+before expanding its history.
 
 Validation applies the existing strict required-field, timezone-aware timestamp,
 finite numeric generation, and WIND-fuel checks. Rejected raw records and their
@@ -257,9 +263,6 @@ look-ahead bias.
 delivery date. The endpoint applies the configured cutoff and publication
 lookback and retrieves matching revisions through the current retrieval time;
 no missing publication is synthesized.
-
-> **Screenshot placeholder:** Add a Forecast Explorer capture here after a
-> representative live timeline is selected.
 
 ## Accuracy formulas
 
@@ -422,17 +425,25 @@ From the repository root, with Docker Engine/Desktop and Compose v2 installed:
 docker compose up --build
 ```
 
-The Nginx frontend is at <http://localhost:8080>; backend health is at
-<http://localhost:8000/api/health>. Nginx proxies browser `/api/` calls to the
-backend container. Stop the stack with:
+The Nginx frontend is at <http://localhost:8080>. Backend health is available
+through the same-origin proxy at <http://localhost:8080/api/health>; the backend
+port is not published on the host. Nginx proxies browser `/api/` calls to the
+backend container. The frontend port binds to loopback for local use only.
+Configure an HTTPS-terminating trusted reverse proxy before any public
+deployment, and do not expose the manual sync endpoint over plain HTTP. Stop
+the stack with:
 
 ```powershell
 docker compose down
 ```
 
-These instructions describe the configured deployment. Docker is not available
-in the current audit environment, so image building, container health, and
-container routing are **not verified here**.
+The ingestion named volume is retained after `docker compose down`; do not use
+`docker compose down -v` unless permanently deleting the persisted source
+history is intended. To verify persistence locally, create records using the
+protected sync endpoint, restart with `docker compose restart backend`, then
+check `/api/data-quality` for retained source-record counts. Docker is not
+available in the current audit environment, so image building, container
+health, and container routing are **not verified here**.
 
 ## Deployment instructions and verified URLs
 
