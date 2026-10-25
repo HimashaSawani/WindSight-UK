@@ -1,6 +1,8 @@
 import axios, { isAxiosError } from 'axios'
 import type {
   AccuracyResponse,
+  APIPerformanceResponse,
+  BacktestResponse,
   ComparisonResponse,
   DataQualityResponse,
   ForecastRevisionResponse,
@@ -50,10 +52,18 @@ export async function getAccuracy(params: DateRange & { decision_date?: string }
   return (await api.get<AccuracyResponse>('/accuracy', { params })).data
 }
 
+export async function getBacktest(params: DateRange & { first_cutoff: string; second_cutoff: string }): Promise<BacktestResponse> {
+  return (await api.get<BacktestResponse>('/backtest', { params })).data
+}
+
 export async function getHistory(params: DateRange): Promise<HistoryResponse> {
   return (await api.get<HistoryResponse>('/history', { params })).data
 }
 
 export async function getDataQuality(): Promise<DataQualityResponse> {
   return (await api.get<DataQualityResponse>('/data-quality')).data
+}
+
+export async function getApiPerformance(): Promise<APIPerformanceResponse> {
+  return (await api.get<APIPerformanceResponse>('/performance')).data
 }

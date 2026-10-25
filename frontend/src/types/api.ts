@@ -99,9 +99,44 @@ export interface OverviewResponse {
   daily_history: DailyAccuracy[]
 }
 
+export interface BacktestCutoffResult {
+  cutoff_local_time: string
+  forecast_metrics: AccuracyMetrics
+  persistence_metrics: AccuracyMetrics
+  persistence_matched_observations: number
+}
+
+export interface BacktestResponse {
+  decision_start: string
+  decision_end: string
+  timezone: 'Europe/London'
+  first: BacktestCutoffResult
+  second: BacktestCutoffResult
+  common: {
+    matched_observations: number
+    first_cutoff_metrics: AccuracyMetrics
+    second_cutoff_metrics: AccuracyMetrics
+  }
+  first_cutoff_error_quantiles_mw: { p10: number; p50: number; p90: number } | null
+  first_cutoff_mean_forecast_mw: number | null
+  first_cutoff_matched_observations: number
+}
+
+export interface APIPerformanceResponse {
+  uptime_seconds: number
+  requests_in_window: number
+  server_errors_in_window: number
+  availability_pct: number | null
+  mean_response_time_ms: number | null
+  p95_response_time_ms: number | null
+  total_requests: number
+  total_server_errors: number
+}
+
 export interface DataQualityResponse {
   status: string
   last_operation: string | null
+  last_attempt: string | null
   last_successful_refresh: string | null
   raw_forecast_records: number
   normalized_forecast_records: number
@@ -109,7 +144,12 @@ export interface DataQualityResponse {
   raw_actual_records: number
   normalized_actual_records: number
   invalid_actual_records: number
+  missing_forecast_records: number
+  missing_actual_records: number
+  forecast_source_latest_time: string | null
+  actual_source_latest_time: string | null
   requests_made: number
   cache_hits: number
+  failed_requests: number
   message: string
 }
