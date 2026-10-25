@@ -41,6 +41,7 @@ async def load_january_comparison_inputs(
     decision_end: date,
     cutoff_local_time: time,
     forecast_lookback_days: int,
+    latest_cutoff_local_time: time | None = None,
 ) -> IngestionResult:
     if decision_end < decision_start:
         raise ValueError("decision_end must be on or after decision_start.")
@@ -53,7 +54,7 @@ async def load_january_comparison_inputs(
 
     latest_cutoff = datetime.combine(
         decision_end,
-        cutoff_local_time,
+        latest_cutoff_local_time or cutoff_local_time,
         tzinfo=ZoneInfo("Europe/London"),
     )
     first_publication = datetime.combine(
