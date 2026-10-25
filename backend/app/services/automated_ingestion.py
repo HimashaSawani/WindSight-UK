@@ -1,7 +1,7 @@
 import logging
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Any
+from typing import Any, Callable, TypeVar
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -13,14 +13,15 @@ from app.services.point_in_time import expected_delivery_intervals, to_utc
 
 logger = logging.getLogger(__name__)
 LONDON = ZoneInfo("Europe/London")
+RecordT = TypeVar("RecordT")
 
 
 def _normalize_batch(
     dataset: str,
     records: list[dict[str, Any]],
-    normalizer,
-) -> tuple[list[Any], list[dict[str, Any]]]:
-    valid = []
+    normalizer: Callable[[dict[str, Any]], RecordT],
+) -> tuple[list[RecordT], list[dict[str, Any]]]:
+    valid: list[RecordT] = []
     rejected = []
     for record in records:
         try:
@@ -115,10 +116,7 @@ async def run_incremental_ingestion(
     actual_end = today_london
     forecast_checkpoint = await store.forecast_checkpoint()
     forecast_from = (
-        max(
-            datetime.combine(actual_start, time.min, tzinfo=LONDON).astimezone(timezone.utc),
-            forecast_checkpoint - timedelta(hours=forecast_overlap_hours),
-        )
+        forecast_checkpoint - timedelta(hours=forecast_overlap_hours)
         if forecast_checkpoint is not None
         else now_utc - timedelta(days=lookback_days)
     )
@@ -159,7 +157,7 @@ async def run_incremental_ingestion(
             conflicting_actual_groups=_conflict_counts(actuals, False)[1],
             off_grid_forecast_records=_off_grid_forecasts(forecasts),
             missing_actual_intervals=_missing_actual_intervals(
-                actuals, actual_start, actual_end
+                actuals, actual_start, min(actual_end, today_london - timedelta(days=1))
             ),
             forecast_source_latest_time=max(
                 (to_utc(record.publish_time) for record in forecasts), default=None

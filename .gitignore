@@ -20,6 +20,7 @@ venv/
 .env.*
 !.env.example
 .cache/
+.data/
 *.egg-info/
 
 # Editor directories and files

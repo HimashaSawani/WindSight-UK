@@ -21,6 +21,12 @@ logger = logging.getLogger(__name__)
 async def _ingestion_loop(application: FastAPI) -> None:
     while True:
         try:
+            application.state.data_diagnostics.update(
+                status="loading",
+                last_operation="scheduled_ingestion",
+                last_attempt=datetime.now(timezone.utc),
+                message="Scheduled Elexon ingestion is running.",
+            )
             async with application.state.ingestion_lock:
                 run = await run_incremental_ingestion(
                     application.state.elexon_client,
@@ -34,6 +40,15 @@ async def _ingestion_loop(application: FastAPI) -> None:
                 last_operation="scheduled_ingestion",
                 last_attempt=datetime.fromisoformat(run["started_at"]),
                 last_successful_refresh=datetime.now(timezone.utc),
+                raw_forecast_records=run["forecast_records_retrieved"],
+                normalized_forecast_records=run["forecast_records_valid"],
+                invalid_forecast_records=run["invalid_forecast_records"],
+                raw_actual_records=run["actual_records_retrieved"],
+                normalized_actual_records=run["actual_records_valid"],
+                invalid_actual_records=run["invalid_actual_records"],
+                missing_actual_records=run["missing_actual_intervals"],
+                forecast_source_latest_time=run["forecast_source_latest_time"],
+                actual_source_latest_time=run["actual_source_latest_time"],
                 message="Scheduled Elexon ingestion completed.",
             )
         except asyncio.CancelledError:

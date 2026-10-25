@@ -134,6 +134,28 @@ export interface APIPerformanceResponse {
   total_server_errors: number
 }
 
+export interface IngestionRun {
+  run_id: string
+  status: 'running' | 'succeeded' | 'failed'
+  started_at: string
+  finished_at: string | null
+  forecast_records_retrieved: number
+  actual_records_retrieved: number
+  forecast_records_valid: number
+  actual_records_valid: number
+  rejected_records: number
+  forecast_source_latest_time: string | null
+  actual_source_latest_time: string | null
+  duplicate_forecast_records: number
+  duplicate_actual_records: number
+  conflicting_forecast_groups: number
+  conflicting_actual_groups: number
+  off_grid_forecast_records: number
+  missing_actual_intervals: number
+  failed_requests: number
+  error: string | null
+}
+
 export interface DataQualityResponse {
   status: string
   last_operation: string | null
@@ -156,7 +178,7 @@ export interface DataQualityResponse {
   stored_forecast_records: number
   stored_actual_records: number
   stored_rejected_records: number
-  recent_ingestion_runs: Array<Record<string, unknown>>
+  recent_ingestion_runs: IngestionRun[]
   missing_actual_intervals: number
   duplicate_forecast_records: number
   duplicate_actual_records: number

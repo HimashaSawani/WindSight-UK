@@ -29,6 +29,8 @@ decision cutoff so later revisions cannot leak into earlier decisions.
   historical cutoff, plus empirical residual what-if scenarios.
 - Pipeline diagnostics for retrieval attempts, successful refreshes, malformed
   and missing records, source timestamps, failed requests, and cache use.
+- Optional scheduled, incremental Elexon ingestion with idempotent file-backed
+  source retention and a token-protected manual sync endpoint.
 - Rolling API availability and response-time metrics (mean and p95).
 - Live Elexon BMRS ingestion: FUELHH actuals filtered to `fuelType=WIND` and
   WINDFOR forecast revisions, with source metadata and timestamps retained.
@@ -49,6 +51,8 @@ React + TypeScript + Vite
                                             └─ FastAPI
                                                 ├─ Elexon BMRS HTTPX client
                                                 ├─ disk response cache
+                                                ├─ scheduled incremental ingestion
+                                                ├─ atomic file-backed source/run store
                                                 ├─ normalization and validation
                                                 ├─ point-in-time selection
                                                 └─ metrics and typed API schemas
@@ -154,6 +158,69 @@ metrics are in-memory and process-local; they reset on restart and are intended
 for this single-process portfolio deployment, not as durable distributed
 monitoring.
 
+## Automated ingestion and validation
+
+The backend can run a lightweight asyncio scheduler in the application process;
+no external queue is required. `WINDSIGHT_INGESTION_ENABLED` controls whether
+the background loop runs (disabled by default for local development and enabled
+by default in Docker Compose). It performs an initial sync on startup and then
+waits `WINDSIGHT_INGESTION_INTERVAL_SECONDS` before the next run. Elexon
+timeouts, HTTP 429, and HTTP 5xx responses use the existing bounded exponential
+backoff/retry policy. A failed run is recorded and surfaced in pipeline
+diagnostics; the next scheduled run retries without advancing the publication
+checkpoint.
+
+Actuals are re-read for the latest configured delivery-date lookback so source
+corrections can be picked up. Forecast ingestion resumes from the last
+successful publication checkpoint with a configurable overlap to capture late
+revisions. Every raw source record in the retrieved window is retained;
+identical source records are idempotently ignored while distinct revisions and
+conflicting values at the same target/publication time are preserved. The
+checkpoint advances only after both source datasets are fetched, validated, and
+persisted successfully.
+
+The store is a versioned JSON document written atomically to
+`WINDSIGHT_INGESTION_STORE_PATH`. It contains source records, rejected-record
+details, the last 100 run summaries, and the incremental checkpoint. Docker
+Compose mounts a named volume at `/data` so the store survives container
+recreation. The existing Elexon disk response cache remains in place and
+reduces repeated requests. This simple store is suitable for the current
+single-process portfolio workload; it is not a substitute for a multi-worker
+database, and concurrent backend replicas must not share it.
+
+Validation applies the existing strict required-field, timezone-aware timestamp,
+finite numeric generation, and WIND-fuel checks. Rejected raw records and their
+validation reason are retained for inspection. Exact repeated source records
+are counted as duplicates; conflicting values at the same forecast target and
+publication timestamp or actual target are separately counted and retained.
+Forecast target timestamps not aligned to a half-hour boundary are reported as
+off-grid; this is a warning, not a reason to fabricate or coerce values.
+Missing actual delivery intervals are counted against DST-aware expected
+half-hour intervals for completed delivery dates in the synchronized window;
+the in-progress local delivery day is excluded to avoid treating not-yet-
+published actuals as missing. The source currently
+publishes forecast targets that may be hourly, so no half-hour interpolation
+or unsupported forecast-coverage assumption is introduced. Missing intervals
+are data availability indicators and do not, by themselves, mean ingestion
+failed.
+
+Configure the pipeline with the `WINDSIGHT_INGESTION_*` variables documented
+in the environment-variable table below.
+
+Manual sync is exposed as `POST /api/admin/ingestion/sync` and requires the
+`X-Admin-Token` header. The endpoint returns HTTP 503 when no admin token is
+configured and HTTP 401 when the supplied token is invalid. For example:
+
+```powershell
+Invoke-RestMethod -Method Post `
+  -Uri http://localhost:8000/api/admin/ingestion/sync `
+  -Headers @{ "X-Admin-Token" = $env:WINDSIGHT_INGESTION_ADMIN_TOKEN }
+```
+
+This token protects the manual ingestion action; it is not user authentication.
+Do not expose the backend administrative endpoint publicly without TLS and
+secret management. Scheduled ingestion does not require the admin token.
+
 ## Forecast Revision Timeline
 
 The Forecast Explorer includes a selectable delivery-interval timeline that
@@ -252,6 +319,12 @@ Backend variables use the `WINDSIGHT_` prefix. Defaults are available in
 | `WINDSIGHT_CACHE_DIR` | `.cache/elexon` | On-disk Elexon response cache location. |
 | `WINDSIGHT_CACHE_TTL_SECONDS` | `900` | Cache lifetime; `0` disables cache reads and writes. |
 | `WINDSIGHT_CACHE_REFRESH` | `false` | Bypass cache reads to force source refresh. |
+| `WINDSIGHT_INGESTION_ENABLED` | `false` | Enable the background ingestion loop; Docker Compose defaults it to `true`. |
+| `WINDSIGHT_INGESTION_INTERVAL_SECONDS` | `3600` | Sync interval in seconds (60–86400). |
+| `WINDSIGHT_INGESTION_LOOKBACK_DAYS` | `2` | Inclusive actual-data lookback and initial forecast lookback (1–90). |
+| `WINDSIGHT_INGESTION_FORECAST_OVERLAP_HOURS` | `6` | Forecast publication overlap to capture late revisions (1–168). |
+| `WINDSIGHT_INGESTION_STORE_PATH` | `.data/windsight/ingestion.json` | Persistent JSON source and run-history store. |
+| `WINDSIGHT_INGESTION_ADMIN_TOKEN` | unset | Protects `POST /api/admin/ingestion/sync`; never commit this secret. |
 | `WINDSIGHT_DECISION_CUTOFF_LOCAL_TIME` | `12:00:00` | Decision clock time in `Europe/London`. |
 | `WINDSIGHT_FORECAST_PUBLICATION_LOOKBACK_DAYS` | `31` | WINDFOR publication lookback (allowed range 1–90 days). |
 
@@ -281,7 +354,8 @@ inclusive and restricted to January 2026; query validation errors return HTTP
 | `GET /api/comparison` | `decision_start`, `decision_end`; optional `decision_date` inside the range | Interval observations, decision/delivery dates, cutoff, forecast age, availability, conflict flags, and provenance. |
 | `GET /api/accuracy` | `decision_start`, `decision_end`; optional `decision_date` inside the range | Overall, by-decision-date, and by-delivery-date metrics. |
 | `GET /api/history` | `decision_start`, `decision_end` | Daily accuracy and coverage trend by decision date. |
-| `GET /api/data-quality` | None | Current process retrieval status, record counts, malformed counts, request and cache-hit counters. |
+| `GET /api/data-quality` | None | Source and pipeline status, persisted record/run counts, validation/duplicate/missing counts, source timestamps, request and cache counters. |
+| `POST /api/admin/ingestion/sync` | `X-Admin-Token` header | Trigger an incremental source sync when an admin token is configured. |
 
 For full schemas and query descriptions, see FastAPI OpenAPI at
 <http://localhost:8000/docs> while the backend is running.
@@ -299,8 +373,9 @@ python -m pytest
 ```
 
 The backend tests use mocked Elexon responses and cover normalization,
-publication cutoffs, duplicate handling, metrics, missing data, DST, and January
-boundaries. The latest executed test report is in
+publication cutoffs, duplicate handling, metrics, missing data, DST, January
+boundaries, incremental ingestion, persistence/idempotency, failed-run recovery,
+and protected manual synchronization. The latest executed test report is in
 [docs/TEST-REPORT.md](./docs/TEST-REPORT.md). Docker has not been built or
 started in this environment; see the report for verification limits.
 

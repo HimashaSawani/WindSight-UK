@@ -86,7 +86,7 @@ async def test_ingestion_validates_persists_and_preserves_conflicting_revisions(
     assert result["duplicate_forecast_groups"] == 1
     assert result["conflicting_forecast_groups"] == 1
     assert result["off_grid_forecast_records"] == 1
-    assert result["missing_actual_intervals"] == 95
+    assert result["missing_actual_intervals"] == 48
     assert len(snapshot["forecasts"]) == 4
     assert len(snapshot["actuals"]) == 3
     assert len(snapshot["rejected"]) == 2
@@ -112,6 +112,9 @@ async def test_incremental_ingestion_is_idempotent_and_retains_revision_history(
     assert len(snapshot["forecasts"]) == 4
     assert len(snapshot["runs"]) == 2
     assert await store.forecast_checkpoint() == now
+    assert client.forecast_calls[1][0] == datetime(
+        2026, 1, 2, 6, tzinfo=timezone.utc
+    )
 
 
 @pytest.mark.asyncio
@@ -136,3 +139,15 @@ async def test_failed_sync_is_recorded_and_checkpoint_does_not_advance(tmp_path)
     assert snapshot["runs"][0]["failed_requests"] == 1
     assert snapshot["runs"][0]["error"] == "source timeout"
     assert await store.forecast_checkpoint() is None
+
+
+@pytest.mark.asyncio
+async def test_corrupt_store_is_not_overwritten(tmp_path) -> None:
+    store_path = tmp_path / "ingestion.json"
+    store_path.write_text("{not-json", encoding="utf-8")
+    store = IngestionStore(str(store_path))
+
+    with pytest.raises(RuntimeError, match="refusing to overwrite"):
+        await store.merge_records([], [], [])
+
+    assert store_path.read_text(encoding="utf-8") == "{not-json"

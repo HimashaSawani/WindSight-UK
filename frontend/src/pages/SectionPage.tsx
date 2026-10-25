@@ -135,6 +135,7 @@ export function MethodologyPage() {
     ['FUELHH', 'Actual half-hourly generation outturn, filtered to fuelType WIND.'],
     ['WINDFOR', 'Wind generation forecast records; source publication times are preserved.'],
   ]
+  const latestIngestionRun = quality.data?.recent_ingestion_runs.at(-1)
   return (
     <section>
       <PageTitle eyebrow="Source, definitions & coverage" title="Methodology and data quality" description="Transparent source provenance and limitations for historical procurement decision support." />
@@ -182,7 +183,23 @@ export function MethodologyPage() {
           <div><p className="text-slate-500">Ingestion runs retained</p><p className="mt-1 font-semibold">{quality.data.recent_ingestion_runs.length} (last 10 shown)</p></div>
           <div className="sm:col-span-2"><p className="text-slate-500">Pipeline detail</p><p className="mt-1 font-medium">{quality.data.message}</p></div>
         </div>}
-        <p className="mt-3 text-xs leading-5 text-slate-500">Retrieval counters are process-local since backend startup. “Source latest” is the newest timestamp in the last successful retrieval, not a claim that historical source data is current.</p>
+        {!quality.isPending && !quality.isError && latestIngestionRun && (
+            <div className="mt-4 rounded-lg border border-slate-200 p-4">
+              <h3 className="text-sm font-semibold">Latest automated/manual sync run · {latestIngestionRun.status}</h3>
+              <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                <div><dt className="text-slate-500">Retrieved · forecast / actual</dt><dd className="font-medium">{latestIngestionRun.forecast_records_retrieved} / {latestIngestionRun.actual_records_retrieved}</dd></div>
+                <div><dt className="text-slate-500">Valid · forecast / actual</dt><dd className="font-medium">{latestIngestionRun.forecast_records_valid} / {latestIngestionRun.actual_records_valid}</dd></div>
+                <div><dt className="text-slate-500">Rejected records</dt><dd className="font-medium">{latestIngestionRun.rejected_records}</dd></div>
+                <div><dt className="text-slate-500">Exact duplicates · forecast / actual</dt><dd className="font-medium">{latestIngestionRun.duplicate_forecast_records} / {latestIngestionRun.duplicate_actual_records}</dd></div>
+                <div><dt className="text-slate-500">Missing actual intervals</dt><dd className="font-medium">{latestIngestionRun.missing_actual_intervals}</dd></div>
+                <div><dt className="text-slate-500">Source request errors</dt><dd className="font-medium">{latestIngestionRun.failed_requests}</dd></div>
+                <div><dt className="text-slate-500">Forecast source latest</dt><dd className="font-medium">{latestIngestionRun.forecast_source_latest_time ? formatLondonDateTime(latestIngestionRun.forecast_source_latest_time) : 'No valid records'}</dd></div>
+                <div><dt className="text-slate-500">Actual source latest</dt><dd className="font-medium">{latestIngestionRun.actual_source_latest_time ? formatLondonDateTime(latestIngestionRun.actual_source_latest_time) : 'No valid records'}</dd></div>
+              </dl>
+              {latestIngestionRun.error && <p role="alert" className="mt-3 text-sm text-rose-700">Pipeline failure: {latestIngestionRun.error}</p>}
+            </div>
+        )}
+        <p className="mt-3 text-xs leading-5 text-slate-500">Elexon HTTP/cache counters are process-local since backend startup; persisted source records and ingestion runs survive container recreation. Missing intervals describe source-data availability and do not, by themselves, mean the pipeline failed. “Source latest” is the newest timestamp in that sync, not a claim that historical source data is current.</p>
       </Panel>
       <Panel className="mt-5" title="API performance" subtitle="Rolling five-minute window, retaining up to 10,000 recent requests; metrics reset when the API process restarts.">
         {performance.isPending ? <LoadingState label="Loading API performance metrics" /> : performance.isError ? <ErrorState message={getApiErrorMessage(performance.error)} retry={() => void performance.refetch()} /> : (

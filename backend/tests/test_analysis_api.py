@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 from app.api import data
+from app import main as main_module
 from app.core.config import Settings
 from app.main import app
 from app.schemas.records import ActualRecord, ForecastRecord
@@ -174,3 +175,43 @@ def test_manual_ingestion_requires_a_configured_valid_admin_token(monkeypatch) -
     assert disabled.status_code == 503
     assert unauthorized.status_code == 401
     assert invalid.status_code == 401
+
+
+def test_manual_ingestion_sync_persists_source_records(monkeypatch, tmp_path) -> None:
+    from app.clients.elexon import ElexonClient
+
+    settings = Settings(
+        ingestion_admin_token="test-secret",
+        ingestion_store_path=str(tmp_path / "ingestion.json"),
+    )
+    monkeypatch.setattr(data, "get_settings", lambda: settings)
+    monkeypatch.setattr(main_module, "settings", settings)
+
+    async def fake_actuals(self, start_date, end_date):
+        return [{
+            "fuelType": "WIND",
+            "settlementDate": end_date.isoformat(),
+            "settlementPeriod": 1,
+            "generation": 0,
+        }]
+
+    async def fake_forecasts(self, publish_from, publish_to):
+        return [{
+            "startTime": "2026-01-02T00:00:00Z",
+            "publishTime": "2026-01-01T11:00:00Z",
+            "generation": 20,
+        }]
+
+    monkeypatch.setattr(ElexonClient, "fetch_actuals", fake_actuals)
+    monkeypatch.setattr(ElexonClient, "fetch_forecasts", fake_forecasts)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/admin/ingestion/sync",
+            headers={"x-admin-token": "test-secret"},
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "succeeded"
+    assert response.json()["stored_forecast_records"] == 1
+    assert response.json()["stored_actual_records"] == 1

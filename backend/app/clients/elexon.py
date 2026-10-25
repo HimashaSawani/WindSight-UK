@@ -105,21 +105,21 @@ class ElexonClient:
             try:
                 response = await self.http.get(url, params=params)
             except httpx.TimeoutException as error:
+                self.failed_requests += 1
                 if attempt == self.max_retries:
-                    self.failed_requests += 1
                     raise ElexonAPIError(f"Elexon request timed out: {url}") from error
                 await asyncio.sleep(self._backoff(attempt))
                 continue
             except httpx.RequestError as error:
+                self.failed_requests += 1
                 if attempt == self.max_retries:
-                    self.failed_requests += 1
                     raise ElexonAPIError(f"Elexon request failed: {error}") from error
                 await asyncio.sleep(self._backoff(attempt))
                 continue
 
             if response.status_code == 429 or response.status_code >= 500:
+                self.failed_requests += 1
                 if attempt == self.max_retries:
-                    self.failed_requests += 1
                     raise ElexonAPIError(
                         f"Elexon returned HTTP {response.status_code} after retries."
                     )

@@ -107,6 +107,7 @@ async def test_retries_rate_limit_using_retry_after(tmp_path) -> None:
 
     assert records == []
     assert request_count == 2
+    assert client.failed_requests == 1
     await transport_client.aclose()
 
 
