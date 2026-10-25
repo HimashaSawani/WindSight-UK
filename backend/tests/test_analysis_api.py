@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 from app.api import data
+from app.core.config import Settings
 from app.main import app
 from app.schemas.records import ActualRecord, ForecastRecord
 
@@ -151,3 +152,25 @@ def test_backtest_rejects_identical_cutoffs() -> None:
     assert response.status_code == 422
     assert performance.status_code == 200
     assert performance.json()["requests_in_window"] >= 1
+
+
+def test_manual_ingestion_requires_a_configured_valid_admin_token(monkeypatch) -> None:
+    monkeypatch.setattr(data, "get_settings", lambda: Settings())
+    with TestClient(app) as client:
+        disabled = client.post("/api/admin/ingestion/sync")
+
+    monkeypatch.setattr(
+        data,
+        "get_settings",
+        lambda: Settings(ingestion_admin_token="test-secret"),
+    )
+    with TestClient(app) as client:
+        unauthorized = client.post("/api/admin/ingestion/sync")
+        invalid = client.post(
+            "/api/admin/ingestion/sync",
+            headers={"x-admin-token": "not-the-secret"},
+        )
+
+    assert disabled.status_code == 503
+    assert unauthorized.status_code == 401
+    assert invalid.status_code == 401

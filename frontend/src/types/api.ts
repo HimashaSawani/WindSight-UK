@@ -152,5 +152,16 @@ export interface DataQualityResponse {
   requests_made: number
   cache_hits: number
   failed_requests: number
+  ingestion_enabled: boolean
+  stored_forecast_records: number
+  stored_actual_records: number
+  stored_rejected_records: number
+  recent_ingestion_runs: Array<Record<string, unknown>>
+  missing_actual_intervals: number
+  duplicate_forecast_records: number
+  duplicate_actual_records: number
+  conflicting_forecast_groups: number
+  conflicting_actual_groups: number
+  off_grid_forecast_records: number
   message: string
 }
