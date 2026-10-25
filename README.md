@@ -120,7 +120,9 @@ plots the retained WINDFOR `generation` values against their original
 `publishTime` timestamps. The vertical marker shows the configured
 `Europe/London` decision cutoff. Every normalized source record in the retrieval
 window remains visible, including repeated publication timestamps; conflicting
-duplicate values are identified rather than silently overwritten.
+duplicate values are identified rather than silently overwritten. Revisions
+sharing a publication timestamp are ordered by generation value so their
+timeline order does not depend on the order returned by Elexon.
 
 For the historical procurement decision, WindSight selects the record with the
 latest publication timestamp at or before the cutoff. A publication exactly at
