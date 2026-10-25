@@ -4,7 +4,7 @@ import hmac
 import time as monotonic_time
 from datetime import date, datetime, time, timedelta, timezone
 from math import ceil
-from typing import Any
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -56,6 +56,7 @@ class ForecastDatasetResponse(BaseModel):
 
 
 class DataDiagnosticsResponse(BaseModel):
+    analytics_data_source: Literal["live_elexon"]
     status: str
     last_operation: str | None
     last_attempt: datetime | None
@@ -625,6 +626,7 @@ async def get_data_quality(request: Request) -> DataDiagnosticsResponse:
     settings = get_settings()
     return DataDiagnosticsResponse(
         **diagnostics,
+        analytics_data_source="live_elexon",
         ingestion_enabled=settings.ingestion_enabled,
         stored_forecast_records=len(state["forecasts"]),
         stored_actual_records=len(state["actuals"]),

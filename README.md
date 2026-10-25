@@ -31,6 +31,8 @@ decision cutoff so later revisions cannot leak into earlier decisions.
   and missing records, source timestamps, failed requests, and cache use.
 - Optional scheduled, incremental Elexon ingestion with idempotent file-backed
   source retention and a token-protected manual sync endpoint.
+- Explicit separation between live Elexon analysis requests and the independent
+  persisted ingestion archive used by pipeline diagnostics.
 - Rolling API availability and response-time metrics (mean and p95).
 - Live Elexon BMRS ingestion: FUELHH actuals filtered to `fuelType=WIND` and
   WINDFOR forecast revisions, with source metadata and timestamps retained.
@@ -64,6 +66,15 @@ Docker Compose (optional)
 
 The backend is organized under `backend/app/{api,clients,core,models,schemas,services}`.
 The Vite application is under `frontend/src/{components,hooks,pages,services,types,utils}`.
+
+```mermaid
+flowchart LR
+  Browser[React and TypeScript UI] -->|analysis queries| API[FastAPI]
+  API -->|live data requests| Elexon[Elexon BMRS]
+  API -->|ingestion diagnostics| Store[Atomic JSON source and run store]
+  API -->|cached responses| Cache[Disk response cache]
+  Scheduler[Optional ingestion scheduler] --> API
+```
 
 ## Technology stack
 
@@ -151,6 +162,8 @@ recommendations, or trading advice.
 `GET /api/data-quality` reports the most recent pipeline operation, attempt
 and successful-refresh timestamps, source record counts, missing and malformed
 records, latest retrieved source timestamps, and Elexon request/cache counters.
+Analysis endpoints currently fetch their data directly from Elexon; the JSON
+ingestion archive is independent and is not an analytics source of truth.
 `GET /api/performance` reports rolling five-minute request count, server-error
 availability, mean and p95 API response time, plus process uptime and lifetime
 counts. The rolling sample is bounded to 10,000 requests. These operational

@@ -71,6 +71,7 @@ def test_analysis_endpoints_return_typed_metrics_and_filter_validation(monkeypat
     assert history.json()["days"][0]["metrics"]["matched_observations"] == 1
     assert quality.status_code == 200
     assert quality.json()["last_successful_refresh"] is not None
+    assert quality.json()["analytics_data_source"] == "live_elexon"
     assert invalid.status_code == 422
 
 
