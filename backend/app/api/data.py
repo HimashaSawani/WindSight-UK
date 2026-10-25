@@ -1,7 +1,9 @@
 import logging
 import asyncio
+import hmac
 import time as monotonic_time
 from datetime import date, datetime, time, timedelta, timezone
+from math import ceil
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -22,6 +24,7 @@ from app.schemas.analysis import (
     ComparisonResponse,
 )
 from app.schemas.records import ActualRecord, ComparisonObservation, ForecastRecord
+from app.services.automated_ingestion import run_incremental_ingestion
 from app.services.ingestion import load_january_comparison_inputs
 from app.services.backtesting import run_backtest
 from app.services.metrics import calculate_metrics
@@ -70,6 +73,17 @@ class DataDiagnosticsResponse(BaseModel):
     missing_actual_records: int
     forecast_source_latest_time: datetime | None
     actual_source_latest_time: datetime | None
+    ingestion_enabled: bool
+    stored_forecast_records: int
+    stored_actual_records: int
+    stored_rejected_records: int
+    recent_ingestion_runs: list[dict[str, Any]]
+    missing_actual_intervals: int
+    duplicate_forecast_records: int
+    duplicate_actual_records: int
+    conflicting_forecast_groups: int
+    conflicting_actual_groups: int
+    off_grid_forecast_records: int
     message: str
 
 
@@ -605,12 +619,95 @@ async def get_overview(
 async def get_data_quality(request: Request) -> DataDiagnosticsResponse:
     diagnostics = _diagnostics(request)
     client = request.app.state.elexon_client
+    state = await request.app.state.ingestion_store.snapshot()
+    runs = state["runs"][-10:]
+    latest_run = runs[-1] if runs else {}
+    settings = get_settings()
     return DataDiagnosticsResponse(
         **diagnostics,
+        ingestion_enabled=settings.ingestion_enabled,
+        stored_forecast_records=len(state["forecasts"]),
+        stored_actual_records=len(state["actuals"]),
+        stored_rejected_records=len(state["rejected"]),
+        recent_ingestion_runs=runs,
+        missing_actual_intervals=latest_run.get("missing_actual_intervals", 0),
+        duplicate_forecast_records=latest_run.get("duplicate_forecast_records", 0),
+        duplicate_actual_records=latest_run.get("duplicate_actual_records", 0),
+        conflicting_forecast_groups=latest_run.get("conflicting_forecast_groups", 0),
+        conflicting_actual_groups=latest_run.get("conflicting_actual_groups", 0),
+        off_grid_forecast_records=latest_run.get("off_grid_forecast_records", 0),
         requests_made=client.requests_made,
         cache_hits=client.cache_hits,
         failed_requests=client.failed_requests,
     )
+
+
+@router.post("/admin/ingestion/sync")
+async def trigger_ingestion_sync(
+    request: Request,
+) -> dict[str, Any]:
+    settings = get_settings()
+    if not settings.ingestion_admin_token:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "admin_sync_disabled",
+                "message": "Manual sync is disabled until an ingestion admin token is configured.",
+            },
+        )
+    provided = request.headers.get("x-admin-token", "")
+    if not hmac.compare_digest(provided, settings.ingestion_admin_token):
+        raise HTTPException(
+            status_code=401,
+            detail={"code": "invalid_admin_token", "message": "A valid admin token is required."},
+        )
+
+    diagnostics = _diagnostics(request)
+    diagnostics.update(
+        status="loading",
+        last_operation="manual_ingestion",
+        last_attempt=datetime.now(timezone.utc),
+        message="Manual Elexon ingestion is running.",
+    )
+    try:
+        async with request.app.state.ingestion_lock:
+            run = await run_incremental_ingestion(
+                request.app.state.elexon_client,
+                request.app.state.ingestion_store,
+                settings.ingestion_lookback_days,
+                settings.ingestion_forecast_overlap_hours,
+            )
+    except Exception as error:
+        diagnostics.update(
+            status="error",
+            message=f"Manual Elexon ingestion failed: {error}",
+        )
+        logger.exception("Manual Elexon ingestion failed.")
+        raise HTTPException(
+            status_code=502,
+            detail={"code": "ingestion_failed", "message": "Elexon ingestion failed; see pipeline diagnostics."},
+        ) from error
+
+    stored = await request.app.state.ingestion_store.snapshot()
+    diagnostics.update(
+        status="ok",
+        last_operation="manual_ingestion",
+        last_attempt=datetime.fromisoformat(run["started_at"]),
+        last_successful_refresh=datetime.now(timezone.utc),
+        raw_forecast_records=run["forecast_records_retrieved"],
+        normalized_forecast_records=run["forecast_records_valid"],
+        invalid_forecast_records=run["invalid_forecast_records"],
+        raw_actual_records=run["actual_records_retrieved"],
+        normalized_actual_records=run["actual_records_valid"],
+        invalid_actual_records=run["invalid_actual_records"],
+        forecast_source_latest_time=run["forecast_source_latest_time"],
+        actual_source_latest_time=run["actual_source_latest_time"],
+        missing_actual_records=run["missing_actual_intervals"],
+        message="Manual Elexon ingestion completed.",
+    )
+    run["stored_forecast_records"] = len(stored["forecasts"])
+    run["stored_actual_records"] = len(stored["actuals"])
+    return run
 
 
 @router.get("/performance", response_model=APIPerformanceResponse)
@@ -634,7 +731,7 @@ async def get_api_performance(request: Request) -> APIPerformanceResponse:
             sum(durations) / len(durations) if durations else None
         ),
         p95_response_time_ms=(
-            durations[min(len(durations) - 1, int(len(durations) * 0.95))]
+            durations[min(len(durations) - 1, ceil(len(durations) * 0.95) - 1)]
             if durations else None
         ),
         total_requests=total_requests,

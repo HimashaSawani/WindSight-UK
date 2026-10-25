@@ -149,9 +149,10 @@ and successful-refresh timestamps, source record counts, missing and malformed
 records, latest retrieved source timestamps, and Elexon request/cache counters.
 `GET /api/performance` reports rolling five-minute request count, server-error
 availability, mean and p95 API response time, plus process uptime and lifetime
-counts. These operational metrics are in-memory and process-local; they reset
-on restart and are intended for this single-process portfolio deployment, not
-as durable distributed monitoring.
+counts. The rolling sample is bounded to 10,000 requests. These operational
+metrics are in-memory and process-local; they reset on restart and are intended
+for this single-process portfolio deployment, not as durable distributed
+monitoring.
 
 ## Forecast Revision Timeline
 

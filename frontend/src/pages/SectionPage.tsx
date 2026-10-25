@@ -173,11 +173,18 @@ export function MethodologyPage() {
           <div><p className="text-slate-500">Elexon source latest · forecast</p><p className="mt-1 font-semibold">{quality.data.forecast_source_latest_time ? formatLondonDateTime(quality.data.forecast_source_latest_time) : 'Not recorded'}</p></div>
           <div><p className="text-slate-500">Elexon source latest · actual</p><p className="mt-1 font-semibold">{quality.data.actual_source_latest_time ? formatLondonDateTime(quality.data.actual_source_latest_time) : 'Not recorded'}</p></div>
           <div><p className="text-slate-500">Cache hit ratio</p><p className="mt-1 font-semibold">{quality.data.cache_hits + quality.data.requests_made ? `${(quality.data.cache_hits / (quality.data.cache_hits + quality.data.requests_made) * 100).toFixed(1)}%` : '—'}</p></div>
+          <div><p className="text-slate-500">Automated sync</p><p className="mt-1 font-semibold">{quality.data.ingestion_enabled ? 'Enabled' : 'Disabled'}</p></div>
+          <div><p className="text-slate-500">Persisted source records · forecasts / actuals</p><p className="mt-1 font-semibold">{quality.data.stored_forecast_records} / {quality.data.stored_actual_records}</p></div>
+          <div><p className="text-slate-500">Rejected / duplicate source records</p><p className="mt-1 font-semibold">{quality.data.stored_rejected_records} / {quality.data.duplicate_forecast_records + quality.data.duplicate_actual_records}</p></div>
+          <div><p className="text-slate-500">Conflicting groups · forecast / actual</p><p className="mt-1 font-semibold">{quality.data.conflicting_forecast_groups} / {quality.data.conflicting_actual_groups}</p></div>
+          <div><p className="text-slate-500">Missing actual intervals</p><p className="mt-1 font-semibold">{quality.data.missing_actual_intervals}</p></div>
+          <div><p className="text-slate-500">Off-grid forecast timestamps</p><p className="mt-1 font-semibold">{quality.data.off_grid_forecast_records}</p></div>
+          <div><p className="text-slate-500">Ingestion runs retained</p><p className="mt-1 font-semibold">{quality.data.recent_ingestion_runs.length} (last 10 shown)</p></div>
           <div className="sm:col-span-2"><p className="text-slate-500">Pipeline detail</p><p className="mt-1 font-medium">{quality.data.message}</p></div>
         </div>}
         <p className="mt-3 text-xs leading-5 text-slate-500">Retrieval counters are process-local since backend startup. “Source latest” is the newest timestamp in the last successful retrieval, not a claim that historical source data is current.</p>
       </Panel>
-      <Panel className="mt-5" title="API performance" subtitle="Rolling five-minute window; metrics are in-memory and reset when the API process restarts.">
+      <Panel className="mt-5" title="API performance" subtitle="Rolling five-minute window, retaining up to 10,000 recent requests; metrics reset when the API process restarts.">
         {performance.isPending ? <LoadingState label="Loading API performance metrics" /> : performance.isError ? <ErrorState message={getApiErrorMessage(performance.error)} retry={() => void performance.refetch()} /> : (
           <div className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <div><p className="text-slate-500">API availability</p><p className="mt-1 text-lg font-semibold">{performance.data.availability_pct === null ? 'No requests yet' : `${performance.data.availability_pct.toFixed(2)}%`}</p></div>
