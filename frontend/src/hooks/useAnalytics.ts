@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { getAccuracy, getComparison, getDataQuality, getForecastRevisions, getHistory, getOverview } from '../services/api'
+import { getAccuracy, getApiPerformance, getBacktest, getComparison, getDataQuality, getForecastRevisions, getHistory, getOverview } from '../services/api'
 
 const queryOptions = { staleTime: 60_000, retry: 2, refetchOnWindowFocus: false }
 
@@ -32,10 +32,28 @@ export function useAccuracy(start: string, end: string, decisionDate?: string) {
   })
 }
 
+export function useBacktest(start: string, end: string, firstCutoff: string, secondCutoff: string) {
+  return useQuery({
+    ...queryOptions,
+    queryKey: ['backtest', start, end, firstCutoff, secondCutoff],
+    queryFn: () => getBacktest({
+      decision_start: start,
+      decision_end: end,
+      first_cutoff: firstCutoff,
+      second_cutoff: secondCutoff,
+    }),
+    enabled: Boolean(firstCutoff && secondCutoff && firstCutoff !== secondCutoff),
+  })
+}
+
 export function useHistory(start: string, end: string) {
   return useQuery({ ...queryOptions, queryKey: ['history', start, end], queryFn: () => getHistory({ decision_start: start, decision_end: end }) })
 }
 
 export function useDataQuality() {
   return useQuery({ ...queryOptions, queryKey: ['data-quality'], queryFn: getDataQuality, refetchInterval: 30_000 })
+}
+
+export function useApiPerformance() {
+  return useQuery({ ...queryOptions, queryKey: ['api-performance'], queryFn: getApiPerformance, refetchInterval: 30_000 })
 }

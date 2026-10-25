@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { Activity, BarChart3, ClipboardList, Info, Wind } from 'lucide-react'
+import { Activity, BarChart3, ClipboardList, Clock3, Info, Wind } from 'lucide-react'
 import { useApiHealth } from '../hooks/useApiHealth'
 import { DatePeriodSelector } from './DatePeriodSelector'
 import { useDecisionPeriod } from '../hooks/useDecisionPeriod'
@@ -9,6 +9,7 @@ const navigation = [
   { to: '/forecasts', label: 'Forecast explorer', icon: Wind },
   { to: '/accuracy', label: 'Accuracy analysis', icon: BarChart3 },
   { to: '/history', label: 'Historical analysis', icon: ClipboardList },
+  { to: '/backtesting', label: 'Backtesting lab', icon: Clock3 },
   { to: '/methodology', label: 'Data & methodology', icon: Info },
 ]
 

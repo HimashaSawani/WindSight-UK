@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppLayout } from './components/AppLayout'
 import { OverviewPage } from './pages/OverviewPage'
+import { BacktestingPage } from './pages/BacktestingPage'
 import {
   AccuracyAnalysisPage,
   ForecastExplorerPage,
@@ -17,6 +18,7 @@ function App() {
         <Route path="/forecasts" element={<ForecastExplorerPage />} />
         <Route path="/accuracy" element={<AccuracyAnalysisPage />} />
         <Route path="/history" element={<HistoricalAnalysisPage />} />
+        <Route path="/backtesting" element={<BacktestingPage />} />
         <Route path="/methodology" element={<MethodologyPage />} />
         <Route path="*" element={<OverviewPage />} />
       </Route>
