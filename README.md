@@ -45,6 +45,25 @@ decision cutoff so later revisions cannot leak into earlier decisions.
 - Async HTTPX client, bounded retries/concurrency, configurable disk cache,
   typed FastAPI responses, and browser API proxy for local development.
 
+## Application screenshots
+
+The dashboard below shows the overview, interval-level forecast explorer, and
+forecast-accuracy metrics. Values reflect the screenshots' data snapshot;
+forecast and actual comparisons are indicative and coverage is limited by
+exact target-time matches.
+
+### 1. Overview
+
+![WindSight UK procurement forecast overview](docs/screenshots/overview.png)
+
+### 2. Forecast Explorer
+
+![WindSight UK forecast explorer showing selected forecasts and actuals](docs/screenshots/forecast-explorer.png)
+
+### 3. Accuracy Analysis
+
+![WindSight UK accuracy analysis showing forecast error metrics](docs/screenshots/accuracy-analysis.png)
+
 ## Architecture
 
 ```text
@@ -358,17 +377,13 @@ npx playwright install chromium
 npm run e2e
 ```
 
-The Playwright test starts Vite itself and mocks API failures; it does not
+The Playwright test starts Vite itself and mocks API responses; it does not
 require a running Elexon-backed API.
 
-The latest local regression run passed 39 backend tests, 3 frontend unit tests,
-all 3 Playwright tests, frontend lint/typecheck/build, Ruff, and both npm and
-Python dependency audits. Playwright checked all six routes at 1440, 768, and
-390 px, plus Axe WCAG 2.1 A/AA, keyboard focus, date selection, chart tooltip,
-and loading/empty/error states. These results do not substitute for a
-GitHub-hosted CI run, Docker startup, or assistive-technology testing; see the
-[final release-readiness report](./FINAL_RELEASE_READINESS.md) for exact
-evidence and limitations.
+See the [QA test report](./docs/TEST-REPORT.md) for the latest locally verified
+results and the checks that were not run. The Playwright browser suite mocks
+API responses, so passing browser tests do not establish live Elexon data
+completeness or substitute for Docker and hosted-CI verification.
 
 ## Environment variables
 
@@ -441,9 +456,8 @@ python -m pytest
 The backend tests use mocked Elexon responses and cover normalization,
 publication cutoffs, duplicate handling, metrics, missing data, DST, January
 boundaries, incremental ingestion, persistence/idempotency, failed-run recovery,
-and protected manual synchronization. The latest executed test report is in
-[docs/TEST-REPORT.md](./docs/TEST-REPORT.md). Docker has not been built or
-started in this environment; see the report for verification limits.
+and protected manual synchronization. The [QA test report](./docs/TEST-REPORT.md)
+records the latest results and verification limits.
 
 ## Docker
 
@@ -516,10 +530,9 @@ included in this project.
 - No persistent database, general user accounts/authentication (the manual
   sync action uses an admin token), trading capability, forecast model, price
   or demand forecast, MWh conversion, or commercial savings calculation.
-- Docker execution, GitHub-hosted CI, and public deployment remain unverified
-  in this environment. The CI workflow and Docker configuration were checked
-  statically; browser accessibility automation passed, but screen-reader
-  testing and in-place viewport-resize behavior remain unverified.
+- Docker execution, GitHub-hosted CI, and public deployment remain unverified.
+  Browser tests use mocked API responses and do not validate live-data
+  completeness; screen-reader testing has not been performed.
 
 ## Future improvements
 
@@ -534,7 +547,3 @@ included in this project.
 - Verify assistive-technology behavior and viewport changes without reload.
 - Add optional persistence/retention only if operational requirements justify
   introducing a database.
-
-## AI assistance disclosure
-
-AI Assistance: AI coding tools, including ChatGPT and the development coding agent, were used to assist with software architecture, code generation, debugging, testing, and documentation. All generated work was subject to developer review and validation.
