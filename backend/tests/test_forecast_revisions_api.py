@@ -96,12 +96,13 @@ def test_duplicate_publication_timestamp_is_preserved_and_selected_stably(
     result = request_revisions(
         monkeypatch,
         [
-            raw_revision("2026-01-01T12:00:00Z", 120),
             raw_revision("2026-01-01T12:00:00Z", 100),
+            raw_revision("2026-01-01T12:00:00Z", 120),
         ],
     )
 
     assert len(result["revisions"]) == 2
+    assert [item["generation_mw"] for item in result["revisions"]] == [100, 120]
     assert all(item["duplicate_publication_timestamp"] for item in result["revisions"])
     assert all(item["conflicting_duplicate"] for item in result["revisions"])
     assert sum(item["selected_for_decision"] for item in result["revisions"]) == 1
@@ -110,6 +111,22 @@ def test_duplicate_publication_timestamp_is_preserved_and_selected_stably(
         for item in result["revisions"]
         if item["selected_for_decision"]
     ) == 100
+
+
+def test_conflicting_duplicate_timeline_order_is_independent_of_source_order(
+    monkeypatch,
+) -> None:
+    result = request_revisions(
+        monkeypatch,
+        [
+            raw_revision("2026-01-01T12:00:00Z", 120),
+            raw_revision("2026-01-01T12:00:00Z", 100),
+        ],
+    )
+
+    assert [item["generation_mw"] for item in result["revisions"]] == [100, 120]
+    assert result["revisions"][0]["selected_for_decision"] is True
+    assert result["revisions"][1]["selected_for_decision"] is False
 
 
 def test_london_target_and_cutoff_are_returned_as_utc(monkeypatch) -> None:

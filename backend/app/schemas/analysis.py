@@ -81,3 +81,39 @@ class OverviewResponse(BaseModel):
     generated_at: datetime
     metrics: AccuracyMetrics
     daily_history: list[DailyAccuracy]
+
+
+class BacktestCutoffResult(BaseModel):
+    cutoff_local_time: time
+    forecast_metrics: AccuracyMetrics
+    persistence_metrics: AccuracyMetrics
+    persistence_matched_observations: int
+
+
+class BacktestCommonResult(BaseModel):
+    matched_observations: int
+    first_cutoff_metrics: AccuracyMetrics
+    second_cutoff_metrics: AccuracyMetrics
+
+
+class BacktestResponse(BaseModel):
+    decision_start: date
+    decision_end: date
+    timezone: Literal["Europe/London"]
+    first: BacktestCutoffResult
+    second: BacktestCutoffResult
+    common: BacktestCommonResult
+    first_cutoff_error_quantiles_mw: dict[str, float] | None
+    first_cutoff_mean_forecast_mw: float | None
+    first_cutoff_matched_observations: int
+
+
+class APIPerformanceResponse(BaseModel):
+    uptime_seconds: float
+    requests_in_window: int
+    server_errors_in_window: int
+    availability_pct: float | None
+    mean_response_time_ms: float | None
+    p95_response_time_ms: float | None
+    total_requests: int
+    total_server_errors: int
