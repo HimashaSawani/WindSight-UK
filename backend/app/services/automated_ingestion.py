@@ -1,11 +1,11 @@
 import logging
 from collections import defaultdict
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, TypeVar
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from app.clients.elexon import ElexonAPIError, ElexonClient
+from app.clients.elexon import ElexonClient
 from app.schemas.records import ActualRecord, ForecastRecord
 from app.services.ingestion_store import IngestionStore
 from app.services.normalization import normalize_actual, normalize_forecast

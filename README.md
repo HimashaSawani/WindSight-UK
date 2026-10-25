@@ -437,6 +437,9 @@ included in this project.
 
 - WINDFOR and FUELHH measurement/aggregation equivalence is not established by
   the inspected endpoint documentation; resulting metrics are indicative.
+- The ingestion JSON store is a single-process portfolio implementation with
+  no retention or indexing policy; it is not sized for unbounded history or
+  multiple backend workers.
 - Hourly forecast targets versus half-hourly actual targets mean exact matching
   can yield missing forecast coverage. No interpolation or forward-fill is
   applied.
@@ -457,8 +460,8 @@ included in this project.
 - Confirm compatible forecast/actual definitions and units with Elexon dataset
   metadata and document the verified interpretation.
 - Confirm the procurement decision cutoff with the business owner.
-- Add CI to run the existing checks and build/publish images; execute Docker
-  acceptance checks in a Docker-enabled environment.
+- Expand automated acceptance checks as the data-source contract is clarified;
+  Docker images are built in CI but local Docker acceptance remains unverified.
 - Deploy to approved frontend/backend hosts and verify public URLs and CORS.
 - Consider code-splitting the frontend bundle after profiling the current build.
 - Add optional persistence/retention only if operational requirements justify
