@@ -140,12 +140,28 @@ def run_backtest(
         first=BacktestCutoffResult(
             cutoff_local_time=first_cutoff,
             forecast_metrics=calculate_metrics(first_matched),
+            benchmark_forecast_metrics=_metrics_for_values(
+                first_baseline_rows,
+                {
+                    row.target_time: row.forecast_mw
+                    for row in first_baseline_rows
+                    if row.forecast_mw is not None
+                },
+            ),
             persistence_metrics=_metrics_for_values(first_baseline_rows, first_baseline),
             persistence_matched_observations=len(first_baseline_rows),
         ),
         second=BacktestCutoffResult(
             cutoff_local_time=second_cutoff,
             forecast_metrics=calculate_metrics(second_matched),
+            benchmark_forecast_metrics=_metrics_for_values(
+                second_baseline_rows,
+                {
+                    row.target_time: row.forecast_mw
+                    for row in second_baseline_rows
+                    if row.forecast_mw is not None
+                },
+            ),
             persistence_metrics=_metrics_for_values(second_baseline_rows, second_baseline),
             persistence_matched_observations=len(second_baseline_rows),
         ),

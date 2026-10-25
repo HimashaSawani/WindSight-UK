@@ -133,7 +133,8 @@ The persistence benchmark for each delivery interval is the forecast for the
 immediately preceding 30-minute target interval that had been published by that
 same decision cutoff. The first interval of a delivery day has no in-day
 predecessor. Missing predecessor forecasts remain missing; baseline metrics
-report their own matched count and are not forward-filled.
+and Elexon benchmark metrics are scored on the same shared matched subset and
+report its count; baseline values are not forward-filled.
 
 The Backtesting Lab also exposes empirical p10/p50/p90 forecast-error
 quantiles. Its What-if panel applies those historical residual quantiles to a

@@ -102,6 +102,7 @@ export interface OverviewResponse {
 export interface BacktestCutoffResult {
   cutoff_local_time: string
   forecast_metrics: AccuracyMetrics
+  benchmark_forecast_metrics: AccuracyMetrics
   persistence_metrics: AccuracyMetrics
   persistence_matched_observations: number
 }

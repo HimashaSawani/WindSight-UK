@@ -69,7 +69,7 @@ export function BacktestingPage() {
           <ErrorState message={getApiErrorMessage(backtest.error)} retry={() => void backtest.refetch()} />
         ) : data ? (
           <>
-            <Panel title="Forecast performance benchmark" subtitle="Persistence baseline = the latest preceding 30-minute interval forecast published by each cutoff. Only information available at that cutoff is used.">
+            <Panel title="Forecast performance benchmark" subtitle="Persistence baseline = the latest preceding 30-minute interval forecast published by each cutoff. Elexon and baseline scores use the same intervals with a valid preceding forecast.">
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[680px] text-left text-sm">
                   <thead><tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
@@ -81,14 +81,14 @@ export function BacktestingPage() {
                   </tr></thead>
                   <tbody>{baselineRows.map((result) => <tr key={result.cutoff_local_time} className="border-b border-slate-100 last:border-0">
                     <td className="px-3 py-3 font-medium">{result.cutoff_local_time.slice(0, 5)} UK time</td>
-                    <td className="px-3 py-3">{metric(result.forecast_metrics.mae_mw)} MW</td>
+                    <td className="px-3 py-3">{metric(result.benchmark_forecast_metrics.mae_mw)} MW</td>
                     <td className="px-3 py-3">{metric(result.persistence_metrics.mae_mw)} MW</td>
                     <td className="px-3 py-3">{metric(result.forecast_metrics.rmse_mw)} MW</td>
-                    <td className="px-3 py-3">{result.forecast_metrics.matched_observations} / {result.persistence_matched_observations} Elexon / baseline</td>
+                    <td className="px-3 py-3">{result.persistence_matched_observations} / {result.forecast_metrics.matched_observations} shared / total</td>
                   </tr>)}</tbody>
                 </table>
               </div>
-              <p className="mt-3 text-xs leading-5 text-slate-500">The persistence baseline is available only when the preceding delivery interval has a forecast. Its score therefore reports its own matched count; it is not silently filled or interpolated.</p>
+              <p className="mt-3 text-xs leading-5 text-slate-500">The persistence baseline is available only when the preceding delivery interval has a forecast. Benchmark metrics are compared on the shared forecast/baseline subset; Elexon total matched count is also shown. Missing baseline values are never filled or interpolated.</p>
             </Panel>
 
             <Panel className="mt-5" title="Cutoff comparison on common intervals" subtitle="Both cutoffs are scored on exactly the same delivery timestamps where actuals and both forecasts are present.">

@@ -86,6 +86,7 @@ class OverviewResponse(BaseModel):
 class BacktestCutoffResult(BaseModel):
     cutoff_local_time: time
     forecast_metrics: AccuracyMetrics
+    benchmark_forecast_metrics: AccuracyMetrics
     persistence_metrics: AccuracyMetrics
     persistence_matched_observations: int
 

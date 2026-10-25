@@ -128,6 +128,8 @@ def test_backtest_compares_common_intervals_and_reports_persistence_baseline(
     result = response.json()
     assert result["first"]["forecast_metrics"]["mae_mw"] == 10
     assert result["second"]["forecast_metrics"]["mae_mw"] == 10
+    assert result["first"]["benchmark_forecast_metrics"]["matched_observations"] == 1
+    assert result["first"]["persistence_metrics"]["matched_observations"] == 1
     assert result["common"]["matched_observations"] == 1
     assert result["common"]["first_cutoff_metrics"]["matched_observations"] == 1
     assert result["first"]["persistence_metrics"]["mae_mw"] == 30
