@@ -6,7 +6,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from filelock import FileLock, Timeout as FileLockTimeout
+
 logger = logging.getLogger(__name__)
+
+
+def acquire_ingestion_lease(store_path: str) -> FileLock:
+    lease = FileLock(f"{store_path}.scheduler.lock")
+    try:
+        lease.acquire(timeout=0)
+    except FileLockTimeout as error:
+        raise RuntimeError(
+            "Scheduled ingestion is already active for this store path. "
+            "Run one ingestion-enabled backend process or configure a "
+            "shared lock-capable store."
+        ) from error
+    return lease
 
 
 def _canonical(record: dict[str, Any]) -> str:
@@ -105,6 +120,13 @@ class IngestionStore:
     async def snapshot(self) -> dict[str, Any]:
         async with self._lock:
             return await asyncio.to_thread(self._read)
+
+    async def size_bytes(self) -> int:
+        try:
+            stat = await asyncio.to_thread(self.path.stat)
+        except FileNotFoundError:
+            return 0
+        return stat.st_size
 
     async def forecast_checkpoint(self) -> datetime | None:
         state = await self.snapshot()

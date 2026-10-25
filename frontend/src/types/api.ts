@@ -176,6 +176,7 @@ export interface DataQualityResponse {
   cache_hits: number
   failed_requests: number
   ingestion_enabled: boolean
+  stored_size_bytes: number
   stored_forecast_records: number
   stored_actual_records: number
   stored_rejected_records: number

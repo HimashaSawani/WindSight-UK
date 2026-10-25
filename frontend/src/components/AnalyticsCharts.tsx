@@ -37,7 +37,7 @@ export function ComparisonChart({ data }: { data: ComparisonObservation[] }) {
   const hasSeries = data.some((row) => row.forecast_mw !== null || row.actual_mw !== null)
   if (!hasSeries) return <p className="py-10 text-center text-sm text-slate-500">No forecast or actual points are available.</p>
   return (
-    <div className="h-72 w-full">
+    <div className="h-72 w-full" role="img" aria-label={`Line chart comparing forecast and actual wind generation in MW across ${data.length} delivery observations. Only exact target-time matches are compared.`}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
           <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
@@ -56,8 +56,9 @@ export function ComparisonChart({ data }: { data: ComparisonObservation[] }) {
 export function ErrorChart({ data }: { data: ComparisonObservation[] }) {
   const hasErrors = data.some((row) => row.error_mw !== null)
   if (!hasErrors) return <p className="py-10 text-center text-sm text-slate-500">No matched observations are available to calculate interval errors.</p>
+  const matchedCount = data.filter((row) => row.error_mw !== null).length
   return (
-    <div className="h-72 w-full">
+    <div className="h-72 w-full" role="img" aria-label={`Line chart showing forecast minus actual error in MW for ${matchedCount} matched delivery observations.`}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
           <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
@@ -85,7 +86,7 @@ export function HistoryTrendChart({ data }: { data: DailyAccuracy[] }) {
     return <p className="py-10 text-center text-sm text-slate-500">No matched daily observations are available.</p>
   }
   return (
-    <div className="h-72 w-full">
+    <div className="h-72 w-full" role="img" aria-label={`Daily line chart of MAE, RMSE, and mean bias error in MW across ${chartData.length} decision dates.`}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={chartData} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
           <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
@@ -164,7 +165,7 @@ export function ForecastRevisionTimelineChart({ data }: { data: ForecastRevision
           <span className="font-semibold text-teal-700">Highlighted point is the selected forecast</span>
         )}
       </div>
-      <div className="h-80 w-full">
+      <div className="h-80 w-full" role="img" aria-label={`Forecast revision timeline showing ${chartData.length} publications for ${formatLondonDateTime(data.target_time)}. The decision cutoff is marked; post-decision revisions were not available to the historical decision.`}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData} margin={{ top: 16, right: 12, bottom: 4, left: 0 }}>
             <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />

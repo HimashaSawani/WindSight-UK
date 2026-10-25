@@ -35,7 +35,7 @@ export function AppLayout() {
               className={({ isActive }) =>
                 `flex shrink-0 items-center gap-3 rounded-lg px-3 py-2.5 text-sm ${
                   isActive ? 'bg-white/10 font-medium text-white' : 'text-slate-300 hover:bg-white/5'
-                }`
+                } focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-300`
               }
             >
               <Icon size={17} aria-hidden="true" />
