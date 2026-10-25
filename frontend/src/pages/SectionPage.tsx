@@ -1,4 +1,4 @@
-import { useAccuracy, useComparison, useDataQuality, useHistory, useOverview } from '../hooks/useAnalytics'
+import { useAccuracy, useApiPerformance, useComparison, useDataQuality, useHistory, useOverview } from '../hooks/useAnalytics'
 import { useDecisionPeriod } from '../hooks/useDecisionPeriod'
 import { getDecisionDates } from '../utils/decisionDates'
 import { formatLondonDateTime } from '../utils/dates'
@@ -129,6 +129,7 @@ export function MethodologyPage() {
   const { start, end } = useDecisionPeriod()
   const overview = useOverview(start, end)
   const quality = useDataQuality()
+  const performance = useApiPerformance()
   const cutoff = overview.data?.decision_cutoff_local_time
   const dateRecords = [
     ['FUELHH', 'Actual half-hourly generation outturn, filtered to fuelType WIND.'],
@@ -163,8 +164,30 @@ export function MethodologyPage() {
       </Panel>
       <Panel className="mt-5" title="Retrieval diagnostics">
         {quality.isPending ? <LoadingState label="Loading data-quality status" /> : quality.isError ? <p className="text-sm text-rose-700">Diagnostics are unavailable.</p> : <div className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-          <div><p className="text-slate-500">Status</p><p className="mt-1 font-semibold">{quality.data.status}</p></div><div><p className="text-slate-500">Last successful refresh</p><p className="mt-1 font-semibold">{quality.data.last_successful_refresh ? formatLondonDateTime(quality.data.last_successful_refresh) : 'Not recorded'}</p></div><div><p className="text-slate-500">Malformed source records</p><p className="mt-1 font-semibold">{quality.data.invalid_forecast_records + quality.data.invalid_actual_records}</p></div><div><p className="text-slate-500">API requests / cache hits</p><p className="mt-1 font-semibold">{quality.data.requests_made} / {quality.data.cache_hits}</p></div>
+          <div><p className="text-slate-500">Pipeline status / operation</p><p className="mt-1 font-semibold">{quality.data.status} / {quality.data.last_operation ?? 'none'}</p></div>
+          <div><p className="text-slate-500">Last attempted sync</p><p className="mt-1 font-semibold">{quality.data.last_attempt ? formatLondonDateTime(quality.data.last_attempt) : 'Not recorded'}</p></div>
+          <div><p className="text-slate-500">Last successful sync</p><p className="mt-1 font-semibold">{quality.data.last_successful_refresh ? formatLondonDateTime(quality.data.last_successful_refresh) : 'Not recorded'}</p></div>
+          <div><p className="text-slate-500">Elexon failed requests</p><p className="mt-1 font-semibold">{quality.data.failed_requests}</p></div>
+          <div><p className="text-slate-500">Malformed records · forecasts / actuals</p><p className="mt-1 font-semibold">{quality.data.invalid_forecast_records} / {quality.data.invalid_actual_records}</p></div>
+          <div><p className="text-slate-500">Missing forecast / actual intervals</p><p className="mt-1 font-semibold">{quality.data.missing_forecast_records} / {quality.data.missing_actual_records}</p></div>
+          <div><p className="text-slate-500">Elexon source latest · forecast</p><p className="mt-1 font-semibold">{quality.data.forecast_source_latest_time ? formatLondonDateTime(quality.data.forecast_source_latest_time) : 'Not recorded'}</p></div>
+          <div><p className="text-slate-500">Elexon source latest · actual</p><p className="mt-1 font-semibold">{quality.data.actual_source_latest_time ? formatLondonDateTime(quality.data.actual_source_latest_time) : 'Not recorded'}</p></div>
+          <div><p className="text-slate-500">Cache hit ratio</p><p className="mt-1 font-semibold">{quality.data.cache_hits + quality.data.requests_made ? `${(quality.data.cache_hits / (quality.data.cache_hits + quality.data.requests_made) * 100).toFixed(1)}%` : '—'}</p></div>
+          <div className="sm:col-span-2"><p className="text-slate-500">Pipeline detail</p><p className="mt-1 font-medium">{quality.data.message}</p></div>
         </div>}
+        <p className="mt-3 text-xs leading-5 text-slate-500">Retrieval counters are process-local since backend startup. “Source latest” is the newest timestamp in the last successful retrieval, not a claim that historical source data is current.</p>
+      </Panel>
+      <Panel className="mt-5" title="API performance" subtitle="Rolling five-minute window; metrics are in-memory and reset when the API process restarts.">
+        {performance.isPending ? <LoadingState label="Loading API performance metrics" /> : performance.isError ? <ErrorState message={getApiErrorMessage(performance.error)} retry={() => void performance.refetch()} /> : (
+          <div className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <div><p className="text-slate-500">API availability</p><p className="mt-1 text-lg font-semibold">{performance.data.availability_pct === null ? 'No requests yet' : `${performance.data.availability_pct.toFixed(2)}%`}</p></div>
+            <div><p className="text-slate-500">Mean response time</p><p className="mt-1 text-lg font-semibold">{performance.data.mean_response_time_ms === null ? '—' : `${performance.data.mean_response_time_ms.toFixed(1)} ms`}</p></div>
+            <div><p className="text-slate-500">P95 response time</p><p className="mt-1 text-lg font-semibold">{performance.data.p95_response_time_ms === null ? '—' : `${performance.data.p95_response_time_ms.toFixed(1)} ms`}</p></div>
+            <div><p className="text-slate-500">Requests / server errors (5m)</p><p className="mt-1 text-lg font-semibold">{performance.data.requests_in_window} / {performance.data.server_errors_in_window}</p></div>
+            <div><p className="text-slate-500">Process uptime</p><p className="mt-1 font-semibold">{Math.floor(performance.data.uptime_seconds / 3600)}h {Math.floor(performance.data.uptime_seconds % 3600 / 60)}m</p></div>
+            <div><p className="text-slate-500">Lifetime requests / errors</p><p className="mt-1 font-semibold">{performance.data.total_requests} / {performance.data.total_server_errors}</p></div>
+          </div>
+        )}
       </Panel>
     </section>
   )
