@@ -317,6 +317,28 @@ Frontend: <http://localhost:5173>. Vite proxies `/api` requests to
 proxy target. `VITE_API_BASE_URL` sets the browser API base URL; use `/api` with
 the same-origin proxy in local and Nginx deployments.
 
+## Automated checks
+
+Run backend checks from `backend`:
+
+```powershell
+ruff check app tests
+python -m pytest
+```
+
+Run frontend checks from `frontend`:
+
+```powershell
+npm run lint
+npm test
+npm run build
+npx playwright install chromium
+npm run e2e
+```
+
+The Playwright test starts Vite itself and mocks API failures; it does not
+require a running Elexon-backed API.
+
 ## Environment variables
 
 Backend variables use the `WINDSIGHT_` prefix. Defaults are available in
@@ -459,11 +481,13 @@ included in this project.
 
 - Confirm compatible forecast/actual definitions and units with Elexon dataset
   metadata and document the verified interpretation.
+- Confirm WINDFOR response completeness and pagination/record limits from
+  authoritative API documentation before claiming coverage is fully explained.
 - Confirm the procurement decision cutoff with the business owner.
-- Expand automated acceptance checks as the data-source contract is clarified;
-  Docker images are built in CI but local Docker acceptance remains unverified.
+- Run the configured GitHub Actions workflow and verify Docker images and
+  Compose startup in an environment with Docker Engine.
 - Deploy to approved frontend/backend hosts and verify public URLs and CORS.
-- Consider code-splitting the frontend bundle after profiling the current build.
+- Expand browser coverage and verify accessibility and tablet layouts.
 - Add optional persistence/retention only if operational requirements justify
   introducing a database.
 

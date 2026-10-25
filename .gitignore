@@ -22,6 +22,9 @@ venv/
 .cache/
 .data/
 *.egg-info/
+frontend/test-results/
+frontend/playwright-report/
+frontend/playwright/.cache/
 
 # Editor directories and files
 .vscode/*
